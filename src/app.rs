@@ -1,0 +1,129 @@
+use std::fmt;
+
+use crate::error_template::{ AppError, ErrorTemplate };
+use leptos::*;
+use leptos_meta::*;
+use leptos_router::*;
+use serde::{ Deserialize, Serialize };
+use leptos_server_signal::create_server_signal;
+
+
+#[cfg(feature = "ssr")]
+use tokio::sync::mpsc;
+
+#[derive(Clone, Default, Serialize, Deserialize)]
+pub struct DayPw {
+    pub value: String,
+}
+
+#[derive(Clone, Default, Serialize, Deserialize)]
+pub struct LogData {
+    pub timeon: String,
+    pub totaltimeon: String,
+    pub currenttimehours: String,
+}
+
+
+impl fmt::Display for LogData {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+      write!(f, "timeon: {}\n totaltimeon: {}", self.timeon, self.totaltimeon)
+    }
+}
+
+#[derive(Clone, Default, Serialize, Deserialize)]
+pub struct RelayMqtt {
+    pub value: String,
+}
+
+#[derive(Clone, Default, Serialize, Deserialize)]
+pub struct CurrentPw {
+    pub value: String,
+}
+
+#[server(TurnOn, "/api")]
+pub async fn set_pool(on: bool) -> Result<(), ServerFnError> {
+    //
+    let tx = use_context::<mpsc::Sender<bool>>()
+        .ok_or_else(|| ServerFnError::ServerError("sender channel is missing!!".into()))
+        .unwrap();
+
+    if on {
+        if let Err(e) = tx.send(on).await {
+            eprintln!("sender chan error (when sending){}", e);
+        }
+    } else {
+        if let Err(e) = tx.send(on).await {
+            eprintln!("sender chan error (when sending){}", e);
+        }
+    }
+    //refer to counter isomorphic example for specifiing return type or error
+    Ok(())
+}
+
+// the receive mqtt will be a server signal implemented by websockects
+//no need for server funcinto
+
+#[component]
+pub fn App() -> impl IntoView {
+    // Provides context that manages stylesheets, titles, meta tags, etc.
+    provide_meta_context();
+
+    view! {
+
+
+        // injects a stylesheet into the document <head>
+        // id=leptos means cargo-leptos will hot-reload this stylesheet
+        <Stylesheet id="leptos" href="/pkg/solar-frontend.css"/>
+
+        // sets the document title
+        <Title text="Welcome to Leptos"/>
+
+        // content for this welcome page
+        <Router fallback=|| {
+            let mut outside_errors = Errors::default();
+            outside_errors.insert_with_default_key(AppError::NotFound);
+            view! {
+                <ErrorTemplate outside_errors/>
+            }
+            .into_view()
+        }>
+            <main>
+                <Routes>
+                    <Route path="" view=HomePage/>
+                </Routes>
+            </main>
+        </Router>
+    }
+}
+
+/// Renders the home page of your application.
+#[component]
+fn HomePage() -> impl IntoView {
+
+    let on = move |_|{
+        spawn_local(async {
+            set_pool(true).await;
+        });
+    };
+    let off = move |_|{
+        spawn_local(async {
+            set_pool(false).await;
+        });
+    };
+
+    leptos_server_signal::provide_websocket("ws://localhost:3000/ws").unwrap();
+
+    // Create server signal
+    // or just create another signall for other things and rename this one
+    let currentpwsignal = create_server_signal::<CurrentPw>("currentpwmqtt");
+    let relaysignal= create_server_signal::<RelayMqtt>("relaymqtt");
+    let daypwsignal= create_server_signal::<DayPw>("daypwmqtt");
+    view! {
+        <h1>"Relay State: "{move || relaysignal().value}</h1>
+        <button on:click=on>"on pool"</button>
+        <button on:click=off>"off pool"</button>
+
+        <p>"Current power: "{move || currentpwsignal().value}</p>
+        <p>"Day power: "{move || daypwsignal().value}</p>
+    }
+}
