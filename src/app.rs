@@ -26,13 +26,17 @@ pub struct LogData {
 
 impl fmt::Display for LogData {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-      write!(f, "timeon: {}\n totaltimeon: {}", self.timeon, self.totaltimeon)
+      write!(f, "timeon: {}\n totaltimeon: {} \n current time: {}", self.timeon, self.totaltimeon,self.currenttimehours)
     }
 }
 
 #[derive(Clone, Default, Serialize, Deserialize)]
 pub struct RelayMqtt {
     pub value: String,
+}
+#[derive(Clone, Default, Serialize, Deserialize)]
+pub struct RebootMqtt {
+    pub value: i64,
 }
 
 #[derive(Clone, Default, Serialize, Deserialize)]
@@ -118,6 +122,9 @@ fn HomePage() -> impl IntoView {
     let currentpwsignal = create_server_signal::<CurrentPw>("currentpwmqtt");
     let relaysignal= create_server_signal::<RelayMqtt>("relaymqtt");
     let daypwsignal= create_server_signal::<DayPw>("daypwmqtt");
+    let logdatasignal= create_server_signal::<LogData>("logdatamqtt");
+    let rebootsignal= create_server_signal::<RebootMqtt>("rebootmqtt");
+
     view! {
         <h1>"Relay State: "{move || relaysignal().value}</h1>
         <button on:click=on>"on pool"</button>
@@ -125,5 +132,12 @@ fn HomePage() -> impl IntoView {
 
         <p>"Current power: "{move || currentpwsignal().value}</p>
         <p>"Day power: "{move || daypwsignal().value}</p>
+
+        <h3>"Logs:"</h3>
+        <p>"Current hour: "{move || logdatasignal().currenttimehours}</p>
+        <p>"time on: "{move || logdatasignal().timeon}</p>
+        <p>"total time on: "{move || logdatasignal().totaltimeon}</p>
+        
+        <p>"last reboot hour: "{move || rebootsignal().value}</p>
     }
 }

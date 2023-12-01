@@ -20,6 +20,8 @@ cfg_if! {
             pub relayget: broadcast::Sender<bool>,
             pub logdataget: broadcast::Sender<LogData>,
             pub relayset: mpsc::Sender<bool>,
+            #[from_ref(skip)]
+            pub rebootget: broadcast::Sender<i64>
         }
     }
 }

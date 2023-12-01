@@ -49,7 +49,10 @@ cfg_if! {
             let mut daypwget = app_state.daypwget.subscribe();
             let mut relayget = app_state.relayget.subscribe();
             let mut logdataget = app_state.logdataget.subscribe();
-            let mut logdata = ServerSignal::<LogData>::new("logdata").unwrap();
+            let mut rebootget = app_state.rebootget.subscribe();
+            let mut reboot = ServerSignal::<RebootMqtt>::new("rebootmqtt").unwrap();
+
+            let mut logdata = ServerSignal::<LogData>::new("logdatamqtt").unwrap();
             let mut currentpw = ServerSignal::<CurrentPw>::new("currentpwmqtt").unwrap();
             let mut relay = ServerSignal::<RelayMqtt>::new("relaymqtt").unwrap();
             let mut daypw = ServerSignal::<DayPw>::new("daypwmqtt").unwrap();
@@ -93,6 +96,15 @@ cfg_if! {
                         let result = logdata.with(
                             &mut socket,
                             |count| *count = log
+                        ).await;
+                        if result.is_err() {
+                            break;
+                        }
+                    },
+                    Ok(log) = rebootget.recv() => {
+                        let result = reboot.with(
+                            &mut socket,
+                            |count| count.value = log
                         ).await;
                         if result.is_err() {
                             break;
@@ -169,6 +181,13 @@ cfg_if! {
             client
                 .subscribe("esp32/sendrelaystate", QoS::AtMostOnce).await
                 .expect("subscribe chan sendrelaystate ERROR");
+            client
+                .subscribe("esp32/sendlogdata", QoS::AtMostOnce).await
+                .expect("subscribe chan sendlogdata ERROR");
+            client
+                .subscribe("esp32/reboot", QoS::AtMostOnce).await
+                .expect("subscribe chan esp32/reboot ERROR");
+
 
             //receiver channel
             let (currentpwget, _rx): (
@@ -178,6 +197,10 @@ cfg_if! {
             let (logdataget, _rx12): (
                 broadcast::Sender<LogData>,
                 broadcast::Receiver<LogData>,
+            ) = broadcast::channel(100);
+            let (reboot, _rx1df2): (
+                broadcast::Sender<i64>,
+                broadcast::Receiver<i64>,
             ) = broadcast::channel(100);
             let (daypwget, _rx2): (
                 broadcast::Sender<i64>,
@@ -194,8 +217,12 @@ cfg_if! {
             let daypwgetq = daypwget.clone();
             let relaygetq = relayget.clone();
             let logdatagetq = logdataget.clone();
+            let rebootq = reboot.clone();
             // receiver channel (will be implemented with server signals)
+            let client2 = client.clone();
             tokio::task::spawn(async move {
+                let mut lasttimeon = String::from("0");
+                let mut lastcurrenttime = String::from("0");
                 'mqqttloop: loop {
                     let event = eventloop.poll().await;
                     match &event {
@@ -284,20 +311,26 @@ cfg_if! {
                                         }
                                     }
                                     "esp32/sendlogdata" => {
+                                        /*
                                         
-                                        let message: LogData = serde_json::from_value(message).unwrap_or(LogData{
-                                            totaltimeon: "error parsing json".into(),
-                                            timeon: "error parsing json".into(),
-                                            currenttimehours: "error parsing json".into(),
-                                        });
+                                        implement last curenttime on and etc 
+                                        
+                                        
+                                         */
+                                        let message: LogData = serde_json
+                                            ::from_value(message)
+                                            .unwrap_or(LogData {
+                                                totaltimeon: "error parsing json".into(),
+                                                timeon: "error parsing json".into(),
+                                                currenttimehours: "error parsing json".into(),
+                                            });
+                                        lastcurrenttime = message.currenttimehours.clone();
+                                        lasttimeon = message.timeon.clone();
                                         if logdatagetq.receiver_count() > 1 {
                                             if let Err(e) = logdatagetq.send(message.clone()) {
                                                 eprintln!("logdataget chan ERROR (when sending){}", e);
                                             } else {
-                                                println!(
-                                                    "recevied message mqtt and sent to chan logdataget: {}",
-                                                    message.clone()
-                                                );
+                                                println!("recevied message mqtt and sent to chan logdataget: {}", message);
                                             }
                                         } else {
                                             let logdatagetqq = logdatagetq.clone();
@@ -355,6 +388,56 @@ cfg_if! {
                                             });
                                         }
                                     }
+                                    "esp32/reboot" => {
+                                        //publish last log data recieved
+                                        let a =
+                                            serde_json::json!({
+                                                //find a way to convert from int to string
+                                              "timehour": lastcurrenttime.parse::<i32>().unwrap_or(0),
+                                                   "timeon": lasttimeon.parse::<i32>().unwrap_or(0),
+                                                                });
+                                        client2
+                                            .publish(
+                                                "esp32/setrebootinfo",
+                                                QoS::AtLeastOnce,
+                                                false,
+                                                a.to_string()
+                                            ).await
+                                            .unwrap_or_else(|e|
+                                                eprintln!("publish chan ERROR: {}", e)
+                                            );
+
+                                        let time: String = String::from(
+                                            message["currenttimehours"]
+                                                .as_str()
+                                                .unwrap_or("error reboot time json parsing")
+                                        );
+
+                                        if rebootq.receiver_count() > 1 {
+                                            if let Err(e) = rebootq.send(time.parse::<i64>().unwrap_or(0)) {
+                                                eprintln!("reboot chan ERROR (when sending){}", e);
+                                            } else {
+                                                println!("recevied message mqtt and sent to chan reboot: {}", message);
+                                            }
+                                        } else {
+                                            let rebootqq = rebootq.clone();
+                                            println!(
+                                                "no receivers for relayget chan so waiting..."
+                                            );
+                                            tokio::task::spawn_blocking(move || {
+                                                loop {
+                                                    if rebootqq.receiver_count() > 1 {
+                                                        if let Err(e) = rebootqq.send(time.parse::<i64>().unwrap_or(0)) {
+                                                            eprintln!("reboot chan ERROR (when sending){}", e);
+                                                        } else {
+                                                            println!("recevied message mqtt and sent to chan reboot: {}", message);
+                                                        }
+                                                        break;
+                                                    }
+                                                }
+                                            });
+                                        }
+                                    }
                                     e => {
                                         eprintln!("unknow mqtt channel ERROR: {}", e);
                                     }
@@ -371,6 +454,10 @@ cfg_if! {
             });
 
             //sender channels
+            client
+                .publish("esp32/get", QoS::AtLeastOnce, false, "uninportant message").await
+                .unwrap_or_else(|e| eprintln!("publish chan ERROR: {}", e));
+
             tokio::spawn(async move {
                 while let Some(msg) = relaysetrx.recv().await {
                     // In any websocket error, break loop.
@@ -401,6 +488,7 @@ cfg_if! {
             let addr = leptos_options.site_addr;
             let routes = generate_route_list(App);
 
+            // implement reboot chan and reboot info vector etc...
             let app_state = AppState {
                 leptos_options,
                 relayset: relayset,
@@ -408,6 +496,7 @@ cfg_if! {
                 currentpwget: currentpwget,
                 daypwget: daypwget,
                 logdataget: logdataget,
+                rebootget: reboot,
             };
 
             // build our application with a route
