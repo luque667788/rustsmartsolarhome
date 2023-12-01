@@ -221,8 +221,8 @@ cfg_if! {
             // receiver channel (will be implemented with server signals)
             let client2 = client.clone();
             tokio::task::spawn(async move {
-                let mut lasttimeon = String::from("0");
-                let mut lastcurrenttime = String::from("0");
+                let mut lasttimeon = 0.0;
+                let mut lastcurrenttime = 0;
                 'mqqttloop: loop {
                     let event = eventloop.poll().await;
                     match &event {
@@ -324,8 +324,8 @@ cfg_if! {
                                                 timeon: "error parsing json".into(),
                                                 currenttimehours: "error parsing json".into(),
                                             });
-                                        lastcurrenttime = message.currenttimehours.clone();
-                                        lasttimeon = message.timeon.clone();
+                                        lastcurrenttime = message.currenttimehours.parse::<i64>().unwrap_or(0);
+                                        lasttimeon = message.timeon.parse::<f64>().unwrap_or(0.0);
                                         if logdatagetq.receiver_count() > 1 {
                                             if let Err(e) = logdatagetq.send(message.clone()) {
                                                 eprintln!("logdataget chan ERROR (when sending){}", e);
@@ -393,8 +393,8 @@ cfg_if! {
                                         let a =
                                             serde_json::json!({
                                                 //find a way to convert from int to string
-                                              "timehour": lastcurrenttime.parse::<i32>().unwrap_or(0),
-                                                   "timeon": lasttimeon.parse::<i32>().unwrap_or(0),
+                                              "timehour": lastcurrenttime,
+                                                   "timeon": lasttimeon,
                                                                 });
                                         client2
                                             .publish(

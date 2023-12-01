@@ -137,7 +137,7 @@ fn HomePage() -> impl IntoView {
         <p>"Current hour: "{move || logdatasignal().currenttimehours}</p>
         <p>"time on: "{move || logdatasignal().timeon}</p>
         <p>"total time on: "{move || logdatasignal().totaltimeon}</p>
-        
+
         <p>"last reboot hour: "{move || rebootsignal().value}</p>
     }
 }
