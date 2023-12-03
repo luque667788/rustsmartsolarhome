@@ -1,4 +1,3 @@
-use axum::Server;
 use cfg_if::cfg_if;
 
 cfg_if! {
@@ -6,7 +5,7 @@ cfg_if! {
         use leptos::*;
         use leptos::{ logging::log, provide_context, get_configuration };
         use axum::{
-            routing::{ post, get },
+            routing::{ get },
             extract::{ State, Path, RawQuery },
             http::{ Request, header::HeaderMap },
             response::{ IntoResponse, Response },
@@ -32,7 +31,7 @@ cfg_if! {
         use tokio::sync::mpsc;
         use tokio::sync::mpsc::Receiver as mReceiver;
         use tokio::sync::mpsc::Sender as mSender;
-        use tokio::time::{ sleep, Duration };
+        use tokio::time::{ Duration };
 
         #[cfg(feature = "ssr")]
         pub async fn websocket(
@@ -131,7 +130,7 @@ cfg_if! {
                 raw_query,
                 move || {
                     provide_context(app_state.relayset.clone());
-                    //provide_context(app_state.txrx.clone());
+                     //provide_context(app_state.txrx.clone());
                 },
                 request
             ).await
@@ -144,7 +143,6 @@ cfg_if! {
             let handler = leptos_axum::render_app_to_stream_with_context(
                 app_state.leptos_options.clone(),
                 move || {
-                    // provide_context(app_state.tx1.clone());
                     // provide_context(app_state.txrx.clone());
                 },
                 || view! { <App/> }
@@ -188,7 +186,6 @@ cfg_if! {
                 .subscribe("esp32/reboot", QoS::AtMostOnce).await
                 .expect("subscribe chan esp32/reboot ERROR");
 
-
             //receiver channel
             let (currentpwget, _rx): (
                 broadcast::Sender<i64>,
@@ -211,7 +208,10 @@ cfg_if! {
                 broadcast::Receiver<bool>,
             ) = broadcast::channel(100);
             //sender relay channel
-            let (relayset, mut relaysetrx): (mSender<bool>, mReceiver<bool>) = mpsc::channel(100);
+            let (relayset, mut relaysetrx): (
+                mSender<ActionMqtt>,
+                mReceiver<ActionMqtt>,
+            ) = mpsc::channel(100);
 
             let currentpwgetq = currentpwget.clone();
             let daypwgetq = daypwget.clone();
@@ -324,7 +324,9 @@ cfg_if! {
                                                 timeon: "error parsing json".into(),
                                                 currenttimehours: "error parsing json".into(),
                                             });
-                                        lastcurrenttime = message.currenttimehours.parse::<i64>().unwrap_or(0);
+                                        lastcurrenttime = message.currenttimehours
+                                            .parse::<i64>()
+                                            .unwrap_or(0);
                                         lasttimeon = message.timeon.parse::<f64>().unwrap_or(0.0);
                                         if logdatagetq.receiver_count() > 1 {
                                             if let Err(e) = logdatagetq.send(message.clone()) {
@@ -414,7 +416,11 @@ cfg_if! {
                                         );
 
                                         if rebootq.receiver_count() > 1 {
-                                            if let Err(e) = rebootq.send(time.parse::<i64>().unwrap_or(0)) {
+                                            if
+                                                let Err(e) = rebootq.send(
+                                                    time.parse::<i64>().unwrap_or(0)
+                                                )
+                                            {
                                                 eprintln!("reboot chan ERROR (when sending){}", e);
                                             } else {
                                                 println!("recevied message mqtt and sent to chan reboot: {}", message);
@@ -427,7 +433,11 @@ cfg_if! {
                                             tokio::task::spawn_blocking(move || {
                                                 loop {
                                                     if rebootqq.receiver_count() > 1 {
-                                                        if let Err(e) = rebootqq.send(time.parse::<i64>().unwrap_or(0)) {
+                                                        if
+                                                            let Err(e) = rebootqq.send(
+                                                                time.parse::<i64>().unwrap_or(0)
+                                                            )
+                                                        {
                                                             eprintln!("reboot chan ERROR (when sending){}", e);
                                                         } else {
                                                             println!("recevied message mqtt and sent to chan reboot: {}", message);
@@ -454,24 +464,41 @@ cfg_if! {
             });
 
             //sender channels
-            client
-                .publish("esp32/get", QoS::AtLeastOnce, false, "uninportant message").await
-                .unwrap_or_else(|e| eprintln!("publish chan ERROR: {}", e));
 
             tokio::spawn(async move {
                 while let Some(msg) = relaysetrx.recv().await {
                     // In any websocket error, break loop.
-                    let msg = || {
-                        if msg { "on" } else { "off" }
-                    };
+                    match msg {
+                        ActionMqtt::State(on) => {
+                            let on = || {
+                                if on { "on" } else { "off" }
+                            };
 
-                    let a =
-                        serde_json::json!({
-                        "state": msg(),
-                    });
-                    client
-                        .publish("esp32/relay", QoS::AtLeastOnce, false, a.to_string()).await
-                        .unwrap_or_else(|e| eprintln!("publish chan ERROR: {}", e));
+                            let a =
+                                serde_json::json!({
+                                "state": on(),
+                            });
+                            client
+                                .publish(
+                                    "esp32/relay",
+                                    QoS::AtLeastOnce,
+                                    false,
+                                    a.to_string()
+                                ).await
+                                .unwrap_or_else(|e| eprintln!("publish chan ERROR: {}", e));
+                        }
+                        ActionMqtt::Get => {
+                            println!("received request to get data");
+                            client
+                                .publish(
+                                    "esp32/get",
+                                    QoS::AtLeastOnce,
+                                    false,
+                                    "uninportant message"
+                                ).await
+                                .unwrap_or_else(|e| eprintln!("publish chan ERROR: {}", e));
+                        }
+                    }
                 }
             });
 
@@ -491,11 +518,11 @@ cfg_if! {
             // implement reboot chan and reboot info vector etc...
             let app_state = AppState {
                 leptos_options,
-                relayset: relayset,
-                relayget: relayget,
-                currentpwget: currentpwget,
-                daypwget: daypwget,
-                logdataget: logdataget,
+                relayset,
+                relayget,
+                currentpwget,
+                daypwget,
+                logdataget,
                 rebootget: reboot,
             };
 

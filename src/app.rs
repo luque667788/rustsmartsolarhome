@@ -7,9 +7,14 @@ use leptos_router::*;
 use serde::{ Deserialize, Serialize };
 use leptos_server_signal::create_server_signal;
 
-
 #[cfg(feature = "ssr")]
 use tokio::sync::mpsc;
+
+#[derive(Clone, Copy, Serialize, Deserialize, Debug)]
+pub enum ActionMqtt {
+    State(bool),
+    Get,
+}
 
 #[derive(Clone, Default, Serialize, Deserialize)]
 pub struct DayPw {
@@ -23,10 +28,15 @@ pub struct LogData {
     pub currenttimehours: String,
 }
 
-
 impl fmt::Display for LogData {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-      write!(f, "timeon: {}\n totaltimeon: {} \n current time: {}", self.timeon, self.totaltimeon,self.currenttimehours)
+        write!(
+            f,
+            "timeon: {}\n totaltimeon: {} \n current time: {}",
+            self.timeon,
+            self.totaltimeon,
+            self.currenttimehours
+        )
     }
 }
 
@@ -45,21 +55,15 @@ pub struct CurrentPw {
 }
 
 #[server(TurnOn, "/api")]
-pub async fn set_pool(on: bool) -> Result<(), ServerFnError> {
+pub async fn set_pool(action: ActionMqtt) -> Result<(), ServerFnError> {
     //
-    let tx = use_context::<mpsc::Sender<bool>>()
+    let tx = use_context::<mpsc::Sender<ActionMqtt>>()
         .ok_or_else(|| ServerFnError::ServerError("sender channel is missing!!".into()))
         .unwrap();
-
-    if on {
-        if let Err(e) = tx.send(on).await {
-            eprintln!("sender chan error (when sending){}", e);
-        }
-    } else {
-        if let Err(e) = tx.send(on).await {
-            eprintln!("sender chan error (when sending){}", e);
-        }
+    if let Err(e) = tx.send(action).await {
+        eprintln!("sender chan error (when sending){}", e);
     }
+
     //refer to counter isomorphic example for specifiing return type or error
     Ok(())
 }
@@ -71,7 +75,17 @@ pub async fn set_pool(on: bool) -> Result<(), ServerFnError> {
 pub fn App() -> impl IntoView {
     // Provides context that manages stylesheets, titles, meta tags, etc.
     provide_meta_context();
+    let url = "localhost:3000";
 
+    leptos_server_signal
+        ::provide_websocket(format!("ws://{}/ws", url).as_str())
+        .unwrap();
+
+    create_local_resource(|| (), |_|async move {
+        spawn_local(async {
+            let _ = set_pool(ActionMqtt::Get).await;
+        });
+    });
     view! {
 
 
@@ -103,27 +117,30 @@ pub fn App() -> impl IntoView {
 /// Renders the home page of your application.
 #[component]
 fn HomePage() -> impl IntoView {
-
-    let on = move |_|{
+    let get = move |_| {
         spawn_local(async {
-            set_pool(true).await;
-        });
-    };
-    let off = move |_|{
-        spawn_local(async {
-            set_pool(false).await;
+            let _ = set_pool(ActionMqtt::Get).await;
         });
     };
 
-    leptos_server_signal::provide_websocket("ws://localhost:3000/ws").unwrap();
+    let on = move |_| {
+        spawn_local(async {
+            let _ = set_pool(ActionMqtt::State(true)).await;
+        });
+    };
+    let off = move |_| {
+        spawn_local(async {
+            let _ = set_pool(ActionMqtt::State(false)).await;
+        });
+    };
 
     // Create server signal
     // or just create another signall for other things and rename this one
     let currentpwsignal = create_server_signal::<CurrentPw>("currentpwmqtt");
-    let relaysignal= create_server_signal::<RelayMqtt>("relaymqtt");
-    let daypwsignal= create_server_signal::<DayPw>("daypwmqtt");
-    let logdatasignal= create_server_signal::<LogData>("logdatamqtt");
-    let rebootsignal= create_server_signal::<RebootMqtt>("rebootmqtt");
+    let relaysignal = create_server_signal::<RelayMqtt>("relaymqtt");
+    let daypwsignal = create_server_signal::<DayPw>("daypwmqtt");
+    let logdatasignal = create_server_signal::<LogData>("logdatamqtt");
+    let rebootsignal = create_server_signal::<RebootMqtt>("rebootmqtt");
 
     view! {
         <h1>"Relay State: "{move || relaysignal().value}</h1>
@@ -139,5 +156,12 @@ fn HomePage() -> impl IntoView {
         <p>"total time on: "{move || logdatasignal().totaltimeon}</p>
 
         <p>"last reboot hour: "{move || rebootsignal().value}</p>
+
+
+
+
+
+
+        <button on:click=get>"Reload values"</button>
     }
 }

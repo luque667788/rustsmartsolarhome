@@ -8,10 +8,11 @@ cfg_if! {
         use tokio::sync::broadcast;
         use tokio::sync::mpsc;
         use crate::app::LogData;
+        use crate::app::ActionMqtt;
 
         /// This takes advantage of Axum's SubStates feature by deriving FromRef. This is the only way to have more than one
         /// item in Axum's State. Leptos requires you to have leptosOptions in your State struct for the leptos route handlers
-        #[derive(FromRef,Clone, Debug)]
+        #[derive(FromRef, Clone, Debug)]
         pub struct AppState {
             pub leptos_options: LeptosOptions,
             #[from_ref(skip)]
@@ -19,9 +20,9 @@ cfg_if! {
             pub daypwget: broadcast::Sender<i64>,
             pub relayget: broadcast::Sender<bool>,
             pub logdataget: broadcast::Sender<LogData>,
-            pub relayset: mpsc::Sender<bool>,
+            pub relayset: mpsc::Sender<ActionMqtt>,
             #[from_ref(skip)]
-            pub rebootget: broadcast::Sender<i64>
+            pub rebootget: broadcast::Sender<i64>,
         }
     }
 }
