@@ -83,7 +83,7 @@ pub fn App() -> impl IntoView {
     let url = window.location().host().unwrap();
     #[cfg(feature = "hydrate")]
     leptos_server_signal
-        ::provide_websocket(format!("ws://{}/ws", url).as_str())
+        ::provide_websocket(format!("wss://{}/ws", url).as_str())
         .unwrap();
 
     create_local_resource(|| (), |_|async move {
