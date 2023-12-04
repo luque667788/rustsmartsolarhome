@@ -75,7 +75,7 @@ pub async fn set_pool(action: ActionMqtt) -> Result<(), ServerFnError> {
 pub fn App() -> impl IntoView {
     // Provides context that manages stylesheets, titles, meta tags, etc.
     provide_meta_context();
-    let url = "localhost:3000";
+    let url = "0.0.0.0:8080";
 
     leptos_server_signal
         ::provide_websocket(format!("ws://{}/ws", url).as_str())
