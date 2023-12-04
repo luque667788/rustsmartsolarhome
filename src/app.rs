@@ -71,7 +71,6 @@ pub async fn set_pool(action: ActionMqtt) -> Result<(), ServerFnError> {
 // the receive mqtt will be a server signal implemented by websockects
 //no need for server funcinto
 
-//git test
 #[component]
 pub fn App() -> impl IntoView {
     // Provides context that manages stylesheets, titles, meta tags, etc.
