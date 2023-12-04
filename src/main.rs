@@ -40,7 +40,7 @@ cfg_if! {
         ) -> axum::response::Response {
             ws.on_upgrade(|ws| handle_socket(app_state, ws))
         }
-        //hi there mother fucker
+        
         #[cfg(feature = "ssr")]
         async fn handle_socket(app_state: AppState, mut socket: axum::extract::ws::WebSocket) {
             use leptos_server_signal::ServerSignal;
