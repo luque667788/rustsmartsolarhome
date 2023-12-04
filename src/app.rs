@@ -7,6 +7,8 @@ use leptos_router::*;
 use serde::{ Deserialize, Serialize };
 use leptos_server_signal::create_server_signal;
 
+
+
 #[cfg(feature = "ssr")]
 use tokio::sync::mpsc;
 
@@ -75,8 +77,11 @@ pub async fn set_pool(action: ActionMqtt) -> Result<(), ServerFnError> {
 pub fn App() -> impl IntoView {
     // Provides context that manages stylesheets, titles, meta tags, etc.
     provide_meta_context();
-    let url = "0.0.0.0:8080";
-
+    #[cfg(feature = "hydrate")]
+    let window = web_sys::window().unwrap();
+    #[cfg(feature = "hydrate")]
+    let url = window.location().host().unwrap();
+    #[cfg(feature = "hydrate")]
     leptos_server_signal
         ::provide_websocket(format!("ws://{}/ws", url).as_str())
         .unwrap();
