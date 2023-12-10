@@ -93,6 +93,7 @@ reload-port = 3001
 #   This binary name can be checked in Powershell with Get-Command npx
 end2end-cmd = "npx playwright test"
 end2end-dir = "end2end"
+tailwind-input-file = "style/tailwind.css"
 
 #  The browserlist query used for optimizing the CSS.
 browserquery = "defaults"

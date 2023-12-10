@@ -24,9 +24,18 @@ cfg_if! {
             TlsConfiguration,
             Transport,
         };
-        use solar_web::app::*;
-        use solar_web::fileserv::file_and_error_handler;
-        use solar_web::state::AppState;
+        pub mod app;
+        pub mod error_template;
+        pub mod fileserv;
+        pub mod state;
+        pub mod auth;
+        pub mod models;
+
+        use crate::fileserv::file_and_error_handler;
+        use crate::state::AppState;
+        use crate::models::*;
+        use crate::app::App;
+        
         use tokio::sync::broadcast;
         use tokio::sync::mpsc;
         use tokio::sync::mpsc::Receiver as mReceiver;
@@ -36,9 +45,15 @@ cfg_if! {
         #[cfg(feature = "ssr")]
         pub async fn websocket(
             State(app_state): State<AppState>,
-            ws: axum::extract::WebSocketUpgrade
+            ws: axum::extract::WebSocketUpgrade,
+            headers: HeaderMap
         ) -> axum::response::Response {
-            ws.on_upgrade(|ws| handle_socket(app_state, ws))
+            if auth::isloged_fn(&headers).await {
+                ws.on_upgrade(|ws| handle_socket(app_state, ws))
+            } else {
+                eprintln!("this should not normally happen ");
+                axum::response::Redirect::to("/login").into_response()
+            }
         }
         
         #[cfg(feature = "ssr")]
@@ -130,7 +145,7 @@ cfg_if! {
                 raw_query,
                 move || {
                     provide_context(app_state.relayset.clone());
-                     //provide_context(app_state.txrx.clone());
+                    //provide_context(app_state.txrx.clone());
                 },
                 request
             ).await

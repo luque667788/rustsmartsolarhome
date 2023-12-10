@@ -1,96 +1,81 @@
-use std::fmt;
+//the signal change but protected rout do not update!!!
+
+use cfg_if::cfg_if;
 
 use crate::error_template::{ AppError, ErrorTemplate };
 use leptos::*;
 use leptos_meta::*;
 use leptos_router::*;
-use serde::{ Deserialize, Serialize };
+
 use leptos_server_signal::create_server_signal;
-
-
+use crate::auth;
+use crate::models::*;
 
 #[cfg(feature = "ssr")]
 use tokio::sync::mpsc;
 
-#[derive(Clone, Copy, Serialize, Deserialize, Debug)]
-pub enum ActionMqtt {
-    State(bool),
-    Get,
-}
-
-#[derive(Clone, Default, Serialize, Deserialize)]
-pub struct DayPw {
-    pub value: String,
-}
-
-#[derive(Clone, Default, Serialize, Deserialize)]
-pub struct LogData {
-    pub timeon: String,
-    pub totaltimeon: String,
-    pub currenttimehours: String,
-}
-
-impl fmt::Display for LogData {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "timeon: {}\n totaltimeon: {} \n current time: {}",
-            self.timeon,
-            self.totaltimeon,
-            self.currenttimehours
-        )
-    }
-}
-
-#[derive(Clone, Default, Serialize, Deserialize)]
-pub struct RelayMqtt {
-    pub value: String,
-}
-#[derive(Clone, Default, Serialize, Deserialize)]
-pub struct RebootMqtt {
-    pub value: i64,
-}
-
-#[derive(Clone, Default, Serialize, Deserialize)]
-pub struct CurrentPw {
-    pub value: String,
-}
-
-#[server(TurnOn, "/api")]
+#[server(TurnOn)]
 pub async fn set_pool(action: ActionMqtt) -> Result<(), ServerFnError> {
     //
-    let tx = use_context::<mpsc::Sender<ActionMqtt>>()
-        .ok_or_else(|| ServerFnError::ServerError("sender channel is missing!!".into()))
-        .unwrap();
-    if let Err(e) = tx.send(action).await {
-        eprintln!("sender chan error (when sending){}", e);
+    if let Some(req) = leptos::use_context::<leptos_axum::RequestParts>() {
+        if auth::isloged_fn(&req.headers).await {
+            let tx = use_context::<mpsc::Sender<ActionMqtt>>()
+                .ok_or_else(|| ServerFnError::ServerError("sender channel is missing!!".into()))
+                .unwrap();
+            if let Err(e) = tx.send(action).await {
+                eprintln!("sender chan error (when sending){}", e);
+            }
+
+            //refer to counter isomorphic example for specifiing return type or error
+        } else {
+            eprintln!("must be loged in");
+        }
+    } else {
+        eprintln!("error fecthing headers cookie");
     }
 
-    //refer to counter isomorphic example for specifiing return type or error
     Ok(())
 }
-
-// the receive mqtt will be a server signal implemented by websockects
-//no need for server funcinto
 
 #[component]
 pub fn App() -> impl IntoView {
     // Provides context that manages stylesheets, titles, meta tags, etc.
     provide_meta_context();
-    #[cfg(feature = "hydrate")]
-    let window = web_sys::window().unwrap();
-    #[cfg(feature = "hydrate")]
-    let url = window.location().host().unwrap();
-    #[cfg(feature = "hydrate")]
-    leptos_server_signal
-        ::provide_websocket(format!("wss://{}/ws", url).as_str())
-        .unwrap();
 
-    create_local_resource(|| (), |_|async move {
-        spawn_local(async {
-            let _ = set_pool(ActionMqtt::Get).await;
-        });
-    });
+    let login = create_server_action::<auth::Login>();
+    let logout = create_server_action::<auth::Logout>();
+
+    let (login_status, set_login_status) = create_signal(false);
+
+    let logout_fn = move |_| {
+        logout.dispatch(auth::Logout {});
+    };
+
+    let user = create_resource(
+        move || { (logout.version().get(), login.version().get()) },
+        move |_| async move {
+            let a = auth::current_user().await;
+            match a {
+                Ok(_) => set_login_status(true),
+                Err(_) => set_login_status(false),
+            }
+            a
+        }
+    );
+
+    create_local_resource(
+        || (),
+        move |_| async move {
+            spawn_local(async {
+                let _ = set_pool(ActionMqtt::Get).await;
+            });
+            let a = auth::current_user().await;
+            match a {
+                Ok(_) => set_login_status(true),
+                Err(_) => set_login_status(false),
+            }
+        }
+    );
     view! {
 
 
@@ -110,9 +95,45 @@ pub fn App() -> impl IntoView {
             }
             .into_view()
         }>
+        <header>
+        <div class="h-32 mx-auto bg-slate-500 w-5/6 p-6 pt-2 mb-20 border-solid border-2 border-sky-500 rounded">
+        <Show
+            when=move || { !login_status() }
+            fallback= move || view! {
+                <h1 class="font-semibold m-2 mt-0">Logged in</h1>
+                
+                <button class="mx-4 bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
+                on:click=logout_fn 
+                
+                >logout</button>
+                 }
+            >
+        <h1 class="font-semibold m-2 mt-0"> Not Logged in </h1>
+        
+        </Show>
+        </div>
+        
+        </header>
             <main>
                 <Routes>
-                    <Route path="" view=HomePage/>
+                <Route path="/" view=move ||view!{
+                    <ProtectedContentWrapper
+                        fallback=move || view! { <Redirect path="/login"/> }
+                        condition =login_status >
+
+                        <Dashboard/>
+                    </ProtectedContentWrapper>
+                }/>
+                <Route path="/login" view=move ||view!{
+                    <ProtectedContentWrapper
+                        fallback=move || view! { <Redirect path="/"/> }
+                        condition =move|| !login_status() >
+
+                        <Login login login_status/>
+                    </ProtectedContentWrapper>
+                }/>
+                
+                    
                 </Routes>
             </main>
         </Router>
@@ -121,7 +142,21 @@ pub fn App() -> impl IntoView {
 
 /// Renders the home page of your application.
 #[component]
-fn HomePage() -> impl IntoView {
+fn Dashboard() -> impl IntoView {
+    cfg_if! {
+        if #[cfg(feature = "hydrate")] {
+            let window = web_sys::window().unwrap();
+            let url = window.location().host().unwrap();
+
+            let protocol = {
+                if window.location().protocol().unwrap() == "https:" { "wss://" } else { "ws://" }
+            };
+            leptos_server_signal
+                ::provide_websocket(format!("{}{}/ws", protocol, url).as_str())
+                .unwrap();
+        }
+    }
+
     let get = move |_| {
         spawn_local(async {
             let _ = set_pool(ActionMqtt::Get).await;
@@ -148,25 +183,108 @@ fn HomePage() -> impl IntoView {
     let rebootsignal = create_server_signal::<RebootMqtt>("rebootmqtt");
 
     view! {
-        <h1>"Relay State: "{move || relaysignal().value}</h1>
-        <button on:click=on>"on pool"</button>
-        <button on:click=off>"off pool"</button>
+        <div class="flex items-stretch">
+        <div class="relayinfo flex-1">
+        
+        <h3>"Relay State: "{move || relaysignal().value}</h3>
+        <button class="m-4 bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-full" on:click=on>"on pool"</button>
+        <button class="m-4 bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-full" on:click=off>"off pool"</button>
 
         <p>"Current power: "{move || currentpwsignal().value}</p>
         <p>"Day power: "{move || daypwsignal().value}</p>
-
+        </div>
+        <div class="loginfo flex-1">
         <h3>"Logs:"</h3>
         <p>"Current hour: "{move || logdatasignal().currenttimehours}</p>
         <p>"time on: "{move || logdatasignal().timeon}</p>
         <p>"total time on: "{move || logdatasignal().totaltimeon}</p>
 
         <p>"last reboot hour: "{move || rebootsignal().value}</p>
+        </div>  
+        </div>
 
 
 
 
+        <button class="mt-20 bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded " on:click=get>"Reload values"</button>
+    }
+}
 
+#[component]
+fn Login(
+    login: Action<auth::Login, Result<(), ServerFnError>>,
+    login_status: ReadSignal<bool>
+) -> impl IntoView {
+    let result_of_call = login.value();
 
-        <button on:click=get>"Reload values"</button>
+    let error = move || {
+        if login_status() {
+            "Login success!".to_owned()
+        } else {
+            result_of_call.with(|msg| {
+                msg.clone()
+                    .map(|inner| {
+                        match inner {
+                            Ok(()) => "loged out".to_owned(),
+
+                            Err(x) => {
+                                format!("login error: {}", x)
+                            }
+                        }
+                    })
+                    .unwrap_or_default()
+            })
+        }
+    };
+
+    view! {
+        <Title text="Login"/>
+        <div class="">
+            <div class="">
+                <div class="">
+                    <div class="">
+
+                        <p class="">
+                            {error}
+                        </p>
+
+                        <ActionForm action=login>
+                            <fieldset class="">
+                                <input name="username" class="" type="text"
+                                    placeholder="Your Username" />
+                            </fieldset>
+                            <fieldset class="">
+                                <input name="password" class="" type="password"
+                                    placeholder="Password" />
+                            </fieldset>
+                            <button class="">"Log in"</button>
+                        </ActionForm>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+}
+
+#[component]
+pub fn ProtectedContentWrapper<F, IV, W>(
+    fallback: F,
+    children: ChildrenFn,
+    condition: W
+)
+    -> impl IntoView
+    where F: Fn() -> IV + 'static, IV: IntoView, W: Fn() -> bool + 'static
+{
+    let fallback = store_value(fallback);
+    let children = store_value(children);
+    let memoized_when = create_memo(move |_| condition());
+    // add when conditional here or pass through as signal (above)
+
+    view! {
+        <Suspense fallback=|| ()>
+            <Show when=memoized_when fallback=move || fallback.with_value(|fallback| fallback())>
+                {children.with_value(|children| children())}
+            </Show>
+        </Suspense>
     }
 }
