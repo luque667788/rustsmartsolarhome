@@ -21,7 +21,6 @@ pub async fn isloged_fn(headers: &axum::http::HeaderMap) -> bool {
             return false;
         }
     };
-    println!("{} {}",user.name,user.pass);
     
     checkcredentials(&user)
 }
