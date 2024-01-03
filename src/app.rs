@@ -194,7 +194,6 @@ fn Dashboard() -> impl IntoView {
         <p>"Day power: "{move || daypwsignal().value}</p>
         </div>
         <div class="loginfo flex-1">
-        <h3>"Logs:"</h3>
         <p>"Current hour: "{move || logdatasignal().currenttimehours}</p>
         <p>"time on: "{move || logdatasignal().timeon}</p>
         <p>"total time on: "{move || logdatasignal().totaltimeon}</p>
