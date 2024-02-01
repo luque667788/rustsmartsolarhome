@@ -172,7 +172,7 @@ cfg_if! {
         #[tokio::main]
         async fn main() {
             simple_logger::init_with_level(log::Level::Error).expect("couldn't initialize logging");
-
+            //this comment mean that this is deploy hahahahah
             let mut mqqt_opts = MqttOptions::new(
                 "test-11231231231",
                 "w39b31e7.ala.us-east-1.emqxsl.com",
