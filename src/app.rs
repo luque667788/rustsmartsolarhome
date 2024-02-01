@@ -37,6 +37,42 @@ pub async fn set_pool(action: ActionMqtt) -> Result<(), ServerFnError> {
     Ok(())
 }
 
+#[server(Settings)]
+pub async fn set_params(
+    mininterval: Option<i32>,
+    mintimeon: Option<i32>,
+    minpw: Option<i32>
+) -> Result<(), ServerFnError> {
+    //
+    if let Some(req) = leptos::use_context::<leptos_axum::RequestParts>() {
+        if auth::isloged_fn(&req.headers).await {
+            let params = ParamsJson {
+    mintimeon:mintimeon,
+    mininterval:mininterval,
+    minpw:minpw,
+
+            };
+            println!("setting mintimeon: {:#?}",mintimeon);
+            println!("setting mininterval: {:#?}",mininterval);
+            println!("setting minpw: {:#?}",minpw);
+            let tx = use_context::<mpsc::Sender<ParamsJson>>()
+                .ok_or_else(||
+                    ServerFnError::ServerError("sender params channel is missing!!".into())
+                )
+                .unwrap();
+            if let Err(e) = tx.send(params).await {
+                eprintln!("sender params chan error (when sending){}", e);
+            }
+        } else {
+            eprintln!("must be loged in");
+        }
+    } else {
+        eprintln!("error fecthing headers cookie");
+    }
+
+    Ok(())
+}
+
 #[component]
 pub fn App() -> impl IntoView {
     // Provides context that manages stylesheets, titles, meta tags, etc.
@@ -77,10 +113,6 @@ pub fn App() -> impl IntoView {
         }
     );
     view! {
-
-
-        // injects a stylesheet into the document <head>
-        // id=leptos means cargo-leptos will hot-reload this stylesheet
         <Stylesheet id="leptos" href="/pkg/solar-frontend.css"/>
 
         // sets the document title
@@ -90,50 +122,87 @@ pub fn App() -> impl IntoView {
         <Router fallback=|| {
             let mut outside_errors = Errors::default();
             outside_errors.insert_with_default_key(AppError::NotFound);
-            view! {
-                <ErrorTemplate outside_errors/>
-            }
-            .into_view()
+            view! { <ErrorTemplate outside_errors/> }.into_view()
         }>
-        <header>
-        <div class="h-32 mx-auto bg-slate-500 w-5/6 p-6 pt-2 mb-20 border-solid border-2 border-sky-500 rounded">
-        <Show
-            when=move || { !login_status() }
-            fallback= move || view! {
-                <h1 class="font-semibold m-2 mt-0">Logged in</h1>
-                
-                <button class="mx-4 bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
-                on:click=logout_fn 
-                
-                >logout</button>
-                 }
-            >
-        <h1 class="font-semibold m-2 mt-0"> Not Logged in </h1>
-        
-        </Show>
-        </div>
-        
-        </header>
+            <header>
+                <div class="h-32 mx-auto bg-slate-500 w-5/6 p-6 pt-2 mb-20 border-solid border-2 border-sky-500 rounded">
+                    <Show
+                        when=move || { !login_status() }
+                        fallback=move || {
+                            view! {
+                                <h1 class="font-semibold m-2 mt-0">Logged in</h1>
+
+                                <button
+                                    class="mx-4 bg-red-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
+                                    on:click=logout_fn
+                                >
+
+                                    logout
+                                </button>
+                                <A href="/settings">
+                                <button
+                                    class="mx-4 bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
+                                    
+                                >
+
+                                Settings
+                                </button>
+                                </A> 
+                            }
+                        }
+                    >
+
+                        <h1 class="font-semibold m-2 mt-0">Not Logged in</h1>
+
+                    </Show>
+                </div>
+
+            </header>
             <main>
                 <Routes>
-                <Route path="/" view=move ||view!{
-                    <ProtectedContentWrapper
-                        fallback=move || view! { <Redirect path="/login"/> }
-                        condition =login_status >
+                    <Route
+                        path="/"
+                        view=move || {
+                            view! {
+                                <ProtectedContentWrapper
+                                    fallback=move || view! { <Redirect path="/login"/> }
+                                    condition=login_status
+                                >
 
-                        <Dashboard/>
-                    </ProtectedContentWrapper>
-                }/>
-                <Route path="/login" view=move ||view!{
-                    <ProtectedContentWrapper
-                        fallback=move || view! { <Redirect path="/"/> }
-                        condition =move|| !login_status() >
+                                    <Dashboard/>
+                                </ProtectedContentWrapper>
+                            }
+                        }
+                    />
+                    <Route
+                        path="/settings"
+                        view=move || {
+                            view! {
+                                <ProtectedContentWrapper
+                                    fallback=move || view! { <Redirect path="/login"/> }
+                                    condition=login_status
+                                >
 
-                        <Login login login_status/>
-                    </ProtectedContentWrapper>
-                }/>
-                
-                    
+                                    <Settings/>
+                                </ProtectedContentWrapper>
+                            }
+                        }
+                    />
+                    <Route
+                        path="/login"
+                        view=move || {
+                            view! {
+                                <ProtectedContentWrapper
+                                    fallback=move || view! { <Redirect path="/"/> }
+                                    condition=move || !login_status()
+                                >
+
+                                    <Login login login_status/>
+                                </ProtectedContentWrapper>
+                            }
+                        }
+                    />
+
                 </Routes>
             </main>
         </Router>
@@ -184,28 +253,66 @@ fn Dashboard() -> impl IntoView {
 
     view! {
         <div class="flex items-stretch">
-        <div class="relayinfo flex-1">
-        
-        <h3>"Relay State: "{move || relaysignal().value}</h3>
-        <button class="m-4 bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-full" on:click=on>"on pool"</button>
-        <button class="m-4 bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-full" on:click=off>"off pool"</button>
+            <div class="relayinfo flex-1">
 
-        <p>"Current power: "{move || currentpwsignal().value}</p>
-        <p>"Day power: "{move || daypwsignal().value}</p>
+            
+                <h3>"Relay State: " <span class=("text-red-700", move || {relaysignal().value == "true"})> {move || relaysignal().value.to_uppercase()}</span></h3>
+                <button
+                    class="m-4 bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-full"
+                    on:click=on
+                >
+                    "on pool"
+                </button>
+                <button
+                    class="m-4 bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-full"
+                    on:click=off
+                >
+                    "off pool"
+                </button>
+                <div class="m-4">
+                <label class="relative inline-flex items-center cursor-pointer">
+                    <input
+                        type="checkbox"
+                        class="sr-only peer"
+
+                        prop:checked=move || {
+                            relaysignal().mode
+                        } 
+
+                        on:change=move |ev| {
+                            let x:bool = event_target_checked(&ev);
+                            log::debug!("Value: {}",x);
+                            spawn_local(async move {
+                                let _ = set_pool(ActionMqtt::setmanualmode(x)).await;
+                            });
+                        }
+                        
+                    />
+                    <div class="w-11 h-6 bg-gray-200 rounded-full peer peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 dark:bg-gray-700 peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-blue-600"></div>
+                    <span class="ms-3 text-sm font-medium text-gray-900">
+                    Manual
+                    Mode
+                    </span>
+                </label>
+                </div>
+
+                <p>"Current power: " {move || currentpwsignal().value}</p>
+                <p>"Day power: " {move || daypwsignal().value}</p>
+            </div>
+            <div class="loginfo flex-1">
+                <p>"Current hour: " {move || logdatasignal().currenttimehours}</p>
+                <p>"time on: " {move || logdatasignal().timeon}</p>
+
+                <p>"last reboot hour: " {move || rebootsignal().value}</p>
+            </div>
         </div>
-        <div class="loginfo flex-1">
-        <p>"Current hour: "{move || logdatasignal().currenttimehours}</p>
-        <p>"time on: "{move || logdatasignal().timeon}</p>
-        <p>"total time on: "{move || logdatasignal().totaltimeon}</p>
 
-        <p>"last reboot hour: "{move || rebootsignal().value}</p>
-        </div>  
-        </div>
-
-
-
-
-        <button class="mt-20 bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded " on:click=get>"Reload values"</button>
+        <button
+            class="mt-20 bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded "
+            on:click=get
+        >
+            "Reload values"
+        </button>
     }
 }
 
@@ -226,9 +333,7 @@ fn Login(
                         match inner {
                             Ok(()) => "loged out".to_owned(),
 
-                            Err(x) => {
-                                format!("login error: {}", x)
-                            }
+                            Err(x) => { format!("login error: {}", x) }
                         }
                     })
                     .unwrap_or_default()
@@ -243,18 +348,24 @@ fn Login(
                 <div class="">
                     <div class="">
 
-                        <p class="">
-                            {error}
-                        </p>
+                        <p class="">{error}</p>
 
                         <ActionForm action=login>
                             <fieldset class="">
-                                <input name="username" class="" type="text"
-                                    placeholder="Your Username" />
+                                <input
+                                    name="username"
+                                    class=""
+                                    type="text"
+                                    placeholder="Your Username"
+                                />
                             </fieldset>
                             <fieldset class="">
-                                <input name="password" class="" type="password"
-                                    placeholder="Password" />
+                                <input
+                                    name="password"
+                                    class=""
+                                    type="password"
+                                    placeholder="Password"
+                                />
                             </fieldset>
                             <button class="">"Log in"</button>
                         </ActionForm>
@@ -265,6 +376,56 @@ fn Login(
     }
 }
 
+#[component]
+fn Settings() -> impl IntoView {
+    let settings = create_server_action::<Settings>();
+
+    let _dismiss_enter_with_keyboard = window_event_listener(ev::keydown, move |ev| {
+        if ev.key() == "Enter"{
+            ev.prevent_default();
+        }
+        
+    });
+    view! {
+        <Title text="Settings"/>
+
+        <div class="">
+            <ActionForm action=settings>
+                <fieldset class="mb-5">
+                <label for="number-input" class="block mb-2 text-sm font-medium text-gray-900 ">Type the minimum interval (in Minutes) for the pool to be turned on/off automatically</label>
+                    <input
+                        name="mininterval"
+                        
+                        type="number" id="number-input"  class="bg-green-300 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500" 
+                        placeholder="Please ONLY type integers, leave blank to maintain the previous value"
+                    />
+                </fieldset>
+                <fieldset class="mb-5">
+                <label for="number-input2" class="block mb-2 text-sm font-medium text-gray-900 ">Type the minimum time (in Hours) the pool should be turned on in a day</label>
+
+                    <input
+                        name="mintimeon"
+                        type="number" id="number-input2"  class="bg-green-300 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500" 
+
+                        placeholder="Please ONLY type integers, leave blank to maintain the previous value"
+                    />
+                </fieldset>
+                <fieldset class="mb-5">
+                <label for="number-input3" class="block mb-2 text-sm font-medium text-gray-900 ">Type the minimum power (in Watss) desired for the pool to be turned on automatically</label>
+
+                    <input
+                        name="minpw"
+                        type="number" id="number-input3"  class="bg-green-300 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500" 
+
+                        placeholder="Please ONLY type integers, leave blank to maintain the previous value"
+                    />
+                </fieldset>
+                <button class="mx-4 bg-red-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">"Save"</button>
+            </ActionForm>
+                    
+        </div>
+    }
+}
 #[component]
 pub fn ProtectedContentWrapper<F, IV, W>(
     fallback: F,

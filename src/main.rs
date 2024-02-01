@@ -35,13 +35,14 @@ cfg_if! {
         use crate::state::AppState;
         use crate::models::*;
         use crate::app::App;
-        
+
         use tokio::sync::broadcast;
         use tokio::sync::mpsc;
         use tokio::sync::mpsc::Receiver as mReceiver;
         use tokio::sync::mpsc::Sender as mSender;
         use tokio::time::{ Duration };
-
+        use std::sync::{Arc};
+        use tokio::sync::{Mutex};
         #[cfg(feature = "ssr")]
         pub async fn websocket(
             State(app_state): State<AppState>,
@@ -96,11 +97,14 @@ cfg_if! {
                             break;
                         }
                     },
-                    Ok(state) = relayget.recv() => {
+                    Ok(msg) = relayget.recv() => {
                         
                         let result = relay.with(
                             &mut socket,
-                            |count| count.value = state.to_string()
+                            |count|{ count.value = msg.value.to_string();
+                                count.mode = msg.mode;
+                            
+                        }
                         ).await;
                         if result.is_err() {
                             break;
@@ -145,7 +149,7 @@ cfg_if! {
                 raw_query,
                 move || {
                     provide_context(app_state.relayset.clone());
-                    //provide_context(app_state.txrx.clone());
+                    provide_context(app_state.paramsset.clone());
                 },
                 request
             ).await
@@ -170,7 +174,7 @@ cfg_if! {
             simple_logger::init_with_level(log::Level::Error).expect("couldn't initialize logging");
 
             let mut mqqt_opts = MqttOptions::new(
-                "test-1",
+                "test-11231231231",
                 "w39b31e7.ala.us-east-1.emqxsl.com",
                 8883
             );
@@ -219,13 +223,17 @@ cfg_if! {
                 broadcast::Receiver<i64>,
             ) = broadcast::channel(100);
             let (relayget, _rx1): (
-                broadcast::Sender<bool>,
-                broadcast::Receiver<bool>,
+                broadcast::Sender<RelayMqtt>,
+                broadcast::Receiver<RelayMqtt>,
             ) = broadcast::channel(100);
             //sender relay channel
             let (relayset, mut relaysetrx): (
                 mSender<ActionMqtt>,
                 mReceiver<ActionMqtt>,
+            ) = mpsc::channel(100);
+            let (paramsset, mut paramssetrx): (
+                mSender<ParamsJson>,
+                mReceiver<ParamsJson>,
             ) = mpsc::channel(100);
 
             let currentpwgetq = currentpwget.clone();
@@ -233,11 +241,18 @@ cfg_if! {
             let relaygetq = relayget.clone();
             let logdatagetq = logdataget.clone();
             let rebootq = reboot.clone();
+            //let lastsettings: Option<ParamsJson> = None;
+            let lastsettings = Arc::new(
+                Mutex::new(ParamsJson { minpw: None, mintimeon: None, mininterval: None })
+            );
             // receiver channel (will be implemented with server signals)
             let client2 = client.clone();
+            let lastsettings1 = Arc::clone(&lastsettings);
+            let lastsettings2 = Arc::clone(&lastsettings);
             tokio::task::spawn(async move {
                 let mut lasttimeon = 0.0;
                 let mut lastcurrenttime = 0;
+                let mut lastmode = true;
                 'mqqttloop: loop {
                     let event = eventloop.poll().await;
                     match &event {
@@ -335,7 +350,6 @@ cfg_if! {
                                         let message: LogData = serde_json
                                             ::from_value(message)
                                             .unwrap_or(LogData {
-                                                totaltimeon: "error parsing json".into(),
                                                 timeon: "error parsing json".into(),
                                                 currenttimehours: "error parsing json".into(),
                                             });
@@ -343,6 +357,7 @@ cfg_if! {
                                             .parse::<i64>()
                                             .unwrap_or(0);
                                         lasttimeon = message.timeon.parse::<f64>().unwrap_or(0.0);
+
                                         if logdatagetq.receiver_count() > 1 {
                                             if let Err(e) = logdatagetq.send(message.clone()) {
                                                 eprintln!("logdataget chan ERROR (when sending){}", e);
@@ -380,8 +395,21 @@ cfg_if! {
                                                 continue 'mqqttloop;
                                             }
                                         };
+                                        let mode: bool = match message["mode"].as_bool() {
+                                            Some(v) => v,
+                                            None => {
+                                                eprintln!("json ERROR attr state not found: {}", message);
+                                                continue 'mqqttloop;
+                                            }
+                                        };
+                                        lastmode = mode;
                                         if relaygetq.receiver_count() > 1 {
-                                            if let Err(e) = relaygetq.send(state) {
+                                            if
+                                                let Err(e) = relaygetq.send(RelayMqtt {
+                                                    value: state.to_string(),
+                                                    mode,
+                                                })
+                                            {
                                                 eprintln!("relayget chan ERROR (when sending){}", e);
                                             } else {
                                                 println!("recevied message mqtt and sent to chan relayget: {}", message);
@@ -394,7 +422,12 @@ cfg_if! {
                                             tokio::task::spawn_blocking(move || {
                                                 loop {
                                                     if relaygetqq.receiver_count() > 1 {
-                                                        if let Err(e) = relaygetqq.send(state) {
+                                                        if
+                                                            let Err(e) = relaygetqq.send(RelayMqtt {
+                                                                value: state.to_string(),
+                                                                mode,
+                                                            })
+                                                        {
                                                             eprintln!("relayget chan ERROR (when sending){}", e);
                                                         } else {
                                                             println!("recevied message mqtt and sent to chan relayget: {}", message);
@@ -406,29 +439,57 @@ cfg_if! {
                                         }
                                     }
                                     "esp32/reboot" => {
+                                        let _lastcurrenttime = lastcurrenttime;
+                                        let _lasttimeon = lasttimeon;
+                                        let _lastmode = lastmode;
                                         //publish last log data recieved
+                                        
+                                        let time: String = String::from(
+                                            message["currenttimehours"]
+                                                .as_str()
+                                                .unwrap_or("error reboot time json parsing")
+                                        );
+
+                                        println!("recevied mqtt message from reboot chan, currenttime = {}",time);
+                                        
+
                                         let a =
                                             serde_json::json!({
                                                 //find a way to convert from int to string
-                                              "timehour": lastcurrenttime,
-                                                   "timeon": lasttimeon,
+                                              "timehour": _lastcurrenttime,
+                                                   "timeon": _lasttimeon,
+                                                   "mode": _lastmode,
                                                                 });
                                         client2
                                             .publish(
                                                 "esp32/setrebootinfo",
-                                                QoS::AtLeastOnce,
+                                                QoS::AtMostOnce,
                                                 false,
                                                 a.to_string()
                                             ).await
                                             .unwrap_or_else(|e|
                                                 eprintln!("publish chan ERROR: {}", e)
                                             );
+                                        let lastsettings1g = lastsettings1.lock().await;
 
-                                        let time: String = String::from(
-                                            message["currenttimehours"]
-                                                .as_str()
-                                                .unwrap_or("error reboot time json parsing")
-                                        );
+                                        let a = serde_json
+                                            ::to_string(
+                                                &*lastsettings1g
+                                            )
+                                            .expect("Failed to serialize to JSON seetigns paramns");
+                                        //println!("enconded json: {}", a);
+                                        client2
+                                            .publish(
+                                                "esp32/settings",
+                                                QoS::ExactlyOnce,
+                                                true,
+                                                a
+                                            ).await
+                                            .unwrap_or_else(|e|
+                                                eprintln!("publish params chan ERROR: {}", e)
+                                            );
+
+                                        
 
                                         if rebootq.receiver_count() > 1 {
                                             if
@@ -481,7 +542,9 @@ cfg_if! {
             //sender channels
 
             tokio::spawn(async move {
-                while let Some(msg) = relaysetrx.recv().await {
+                loop {
+                    tokio::select! {
+                Some(msg) = relaysetrx.recv() => {
                     // In any websocket error, break loop.
                     match msg {
                         ActionMqtt::State(on) => {
@@ -496,8 +559,8 @@ cfg_if! {
                             client
                                 .publish(
                                     "esp32/relay",
-                                    QoS::AtLeastOnce,
-                                    false,
+                                    QoS::ExactlyOnce,
+                                    true,
                                     a.to_string()
                                 ).await
                                 .unwrap_or_else(|e| eprintln!("publish chan ERROR: {}", e));
@@ -507,13 +570,61 @@ cfg_if! {
                             client
                                 .publish(
                                     "esp32/get",
-                                    QoS::AtLeastOnce,
+                                    QoS::AtMostOnce,
                                     false,
                                     "uninportant message"
                                 ).await
                                 .unwrap_or_else(|e| eprintln!("publish chan ERROR: {}", e));
                         }
+                        ActionMqtt::setmanualmode(on) => {
+                             
+                                let on = || {
+                                    if on { "on" } else { "off" }
+                                };
+    
+                                let a =
+                                    serde_json::json!({
+                                    "state": on(),
+                                });
+                                println!("setting Manual mode to :{a}");
+                                client
+                                    .publish(
+                                        "esp32/setmanualmode",
+                                        QoS::AtMostOnce,
+                                        false,
+                                        a.to_string()
+                                    ).await
+                                    .unwrap_or_else(|e| eprintln!("publish chan ERROR: {}", e));
+                            
+                        }
                     }
+                },
+                Some(msg) = paramssetrx.recv() => {
+
+                    let mut lastsettings2g = lastsettings2.lock().await;
+                    
+                    if let Some(value) = msg.minpw {
+                        lastsettings2g.minpw = Some(value);
+                    }
+                    if let Some(value) = msg.mintimeon {
+                        lastsettings2g.mintimeon = Some(value);
+                    }
+                    if let Some(value) = msg.mininterval {
+                        lastsettings2g.mininterval = Some(value);
+                    }
+
+                    let a = serde_json::to_string(&msg).expect("Failed to serialize to JSON seetigns paramns");
+                    println!("enconded json: {}",a);
+                    client
+                    .publish(
+                        "esp32/settings",
+                        QoS::ExactlyOnce,
+                        true,
+                        a
+                    ).await
+                    .unwrap_or_else(|e| eprintln!("publish params chan ERROR: {}", e));
+                }
+                }
                 }
             });
 
@@ -539,6 +650,7 @@ cfg_if! {
                 daypwget,
                 logdataget,
                 rebootget: reboot,
+                paramsset,
             };
 
             // build our application with a route

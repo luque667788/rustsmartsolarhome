@@ -1,0 +1,12 @@
+"filename", "language", "TOML", "rs", "comment", "blank", "total"
+"/home/luque/prog/rust/solar-web/Cargo.lock", "TOML", 2710, 0, 0, 301, 3011
+"/home/luque/prog/rust/solar-web/Cargo.toml", "TOML", 106, 0, 0, 20, 126
+"/home/luque/prog/rust/solar-web/src/app.rs", "rs", 0, 376, 11, 62, 449
+"/home/luque/prog/rust/solar-web/src/auth.rs", "rs", 0, 94, 5, 14, 113
+"/home/luque/prog/rust/solar-web/src/error_template.rs", "rs", 0, 58, 9, 8, 75
+"/home/luque/prog/rust/solar-web/src/fileserv.rs", "rs", 0, 35, 2, 6, 43
+"/home/luque/prog/rust/solar-web/src/lib.rs", "rs", 0, 18, 1, 4, 23
+"/home/luque/prog/rust/solar-web/src/main.rs", "rs", 0, 594, 26, 46, 666
+"/home/luque/prog/rust/solar-web/src/models.rs", "rs", 0, 49, 0, 9, 58
+"/home/luque/prog/rust/solar-web/src/state.rs", "rs", 0, 26, 2, 5, 33
+"Total", "-", 2816, 1250, 56, 475, 4597
