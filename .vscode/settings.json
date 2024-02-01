@@ -16,4 +16,12 @@
         "strings": true
       },
       "css.validate": false,
+      "rust-analyzer.procMacro.ignored": {
+        "leptos_macro": [
+            // optional:
+            // "component",
+            "server"
+        ],
+    },
+    "rust-analyzer.rustfmt.overrideCommand": ["leptosfmt", "--stdin", "--rustfmt"],
 }
