@@ -471,10 +471,10 @@ cfg_if! {
                                                 QoS::AtMostOnce,
                                                 false,
                                                 a.to_string()
-                                            ).await.expect("publish chan ERROR:")
+                                            ).await.expect("publish chan ERROR:");
                                             //.unwrap_or_else(|e|
-                                                eprintln!("publish chan ERROR: {}", e)
-                                            );
+                                             //   eprintln!("publish chan ERROR: {}", e)
+                                           // );
 
                                         if rebootq.receiver_count() > 1 {
                                             if
