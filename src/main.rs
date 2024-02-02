@@ -1,3 +1,5 @@
+use core::num;
+
 use cfg_if::cfg_if;
 
 cfg_if! {
@@ -41,8 +43,8 @@ cfg_if! {
         use tokio::sync::mpsc::Receiver as mReceiver;
         use tokio::sync::mpsc::Sender as mSender;
         use tokio::time::{ Duration };
-        use std::sync::{Arc};
-        use tokio::sync::{Mutex};
+        use std::sync::{ Arc };
+        use tokio::sync::{ Mutex };
         #[cfg(feature = "ssr")]
         pub async fn websocket(
             State(app_state): State<AppState>,
@@ -56,7 +58,7 @@ cfg_if! {
                 axum::response::Redirect::to("/login").into_response()
             }
         }
-        
+
         #[cfg(feature = "ssr")]
         async fn handle_socket(app_state: AppState, mut socket: axum::extract::ws::WebSocket) {
             use leptos_server_signal::ServerSignal;
@@ -150,6 +152,7 @@ cfg_if! {
                 move || {
                     provide_context(app_state.relayset.clone());
                     provide_context(app_state.paramsset.clone());
+                    provide_context(app_state.lasthour.clone());
                 },
                 request
             ).await
@@ -241,10 +244,9 @@ cfg_if! {
             let relaygetq = relayget.clone();
             let logdatagetq = logdataget.clone();
             let rebootq = reboot.clone();
-            //let lastsettings: Option<ParamsJson> = None;
-            let lastsettings = Arc::new(
-                Mutex::new(ParamsJson { minpw: None, mintimeon: None, mininterval: None })
-            );
+
+            let lasthour = Arc::new(Mutex::new("not defined".to_string()));
+            let lasthour1 = Arc::clone(&lasthour);
             // receiver channel (will be implemented with server signals)
             let client2 = client.clone();
 
@@ -443,15 +445,18 @@ cfg_if! {
                                         let _lasttimeon = lasttimeon;
                                         let _lastmode = lastmode;
                                         //publish last log data recieved
-                                        
+
                                         let time: String = String::from(
                                             message["currenttimehours"]
                                                 .as_str()
                                                 .unwrap_or("error reboot time json parsing")
                                         );
 
-                                        println!("recevied mqtt message from reboot chan, currenttime = {}",time);
-                                        
+                                        println!("recevied mqtt message from reboot chan, currenttime = {}", time);
+                                        {
+                                            let mut t = lasthour1.lock().await;
+                                            *t = time.clone();
+                                        }
 
                                         let a =
                                             serde_json::json!({
@@ -466,13 +471,10 @@ cfg_if! {
                                                 QoS::AtMostOnce,
                                                 false,
                                                 a.to_string()
-                                            ).await
-                                            .unwrap_or_else(|e|
+                                            ).await.expect("publish chan ERROR:")
+                                            //.unwrap_or_else(|e|
                                                 eprintln!("publish chan ERROR: {}", e)
                                             );
-                                        
-
-                                        
 
                                         if rebootq.receiver_count() > 1 {
                                             if
@@ -515,7 +517,7 @@ cfg_if! {
                         }
                         Err(e) => {
                             println!("Got event mqtt Error = {e:?}");
-
+                            panic!("rumqttc::ConnectionError>");
                             return Ok::<(), rumqttc::ConnectionError>(());
                         }
                     }
@@ -545,8 +547,8 @@ cfg_if! {
                                     QoS::AtMostOnce,
                                     false,
                                     a.to_string()
-                                ).await
-                                .unwrap_or_else(|e| eprintln!("publish chan ERROR: {}", e));
+                                ).await.expect("publish chan ERROR:")
+                                //.unwrap_or_else(|e| eprintln!("publish chan ERROR: {}", e));
                         }
                         ActionMqtt::Get => {
                             println!("received request to get data");
@@ -556,8 +558,8 @@ cfg_if! {
                                     QoS::AtMostOnce,
                                     false,
                                     "uninportant message"
-                                ).await
-                                .unwrap_or_else(|e| eprintln!("publish chan ERROR: {}", e));
+                                ).await.expect("publish chan ERROR:")
+                                //.unwrap_or_else(|e| eprintln!("publish chan ERROR: {}", e));
                         }
                         ActionMqtt::setmanualmode(on) => {
                              
@@ -576,8 +578,8 @@ cfg_if! {
                                         QoS::AtMostOnce,
                                         false,
                                         a.to_string()
-                                    ).await
-                                    .unwrap_or_else(|e| eprintln!("publish chan ERROR: {}", e));
+                                    ).await.expect("publish chan ERROR:")
+                                    //.unwrap_or_else(|e| eprintln!("publish chan ERROR: {}", e));
                             
                         }
                     }
@@ -624,8 +626,8 @@ cfg_if! {
                 logdataget,
                 rebootget: reboot,
                 paramsset,
+                lasthour: lasthour.clone(),
             };
-
             // build our application with a route
             let app = Router::new()
                 .route("/api/*fn_name", get(server_fn_handler).post(server_fn_handler))

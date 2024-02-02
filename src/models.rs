@@ -46,7 +46,7 @@ pub struct RelayMqtt {
     pub value: String,
     pub mode: bool,
 }
-#[derive(Clone, Default, Serialize, Deserialize)]
+#[derive(Clone, Default, Serialize, Deserialize,PartialEq)]
 pub struct RebootMqtt {
     pub value: i64,
 }

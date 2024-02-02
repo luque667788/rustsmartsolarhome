@@ -13,6 +13,38 @@ use crate::models::*;
 
 #[cfg(feature = "ssr")]
 use tokio::sync::mpsc;
+#[cfg(feature = "ssr")]
+use std::sync::Arc;
+#[cfg(feature = "ssr")]
+use tokio::sync::Mutex;
+
+#[server(GetReboot)]
+pub async fn get_reboothour() -> Result<String, ServerFnError> {
+    //
+    if let Some(req) = leptos::use_context::<leptos_axum::RequestParts>() {
+        if auth::isloged_fn(&req.headers).await {
+            let hour = use_context::<Arc<Mutex<String>>>().ok_or_else(||
+                ServerFnError::ServerError("could not get lasthour".into())
+            );
+            return match hour {
+                Ok(h) => {
+                     Ok(h.lock().await.clone())
+                }
+                Err(e) =>{
+                     Err(e)
+                }
+            }
+            
+            //refer to counter isomorphic example for specifiing return type or error
+        } else {
+            eprintln!("must be loged in");
+        }
+    } else {
+        eprintln!("error fecthing headers cookie");
+    }
+
+    Ok("could not get login info".to_string())
+}
 
 #[server(TurnOn)]
 pub async fn set_pool(action: ActionMqtt) -> Result<(), ServerFnError> {
@@ -47,14 +79,13 @@ pub async fn set_params(
     if let Some(req) = leptos::use_context::<leptos_axum::RequestParts>() {
         if auth::isloged_fn(&req.headers).await {
             let params = ParamsJson {
-    mintimeon:mintimeon,
-    mininterval:mininterval,
-    minpw:minpw,
-
+                mintimeon: mintimeon,
+                mininterval: mininterval,
+                minpw: minpw,
             };
-            println!("setting mintimeon: {:#?}",mintimeon);
-            println!("setting mininterval: {:#?}",mininterval);
-            println!("setting minpw: {:#?}",minpw);
+            println!("setting mintimeon: {:#?}", mintimeon);
+            println!("setting mininterval: {:#?}", mininterval);
+            println!("setting minpw: {:#?}", minpw);
             let tx = use_context::<mpsc::Sender<ParamsJson>>()
                 .ok_or_else(||
                     ServerFnError::ServerError("sender params channel is missing!!".into())
@@ -223,8 +254,10 @@ fn Dashboard() -> impl IntoView {
             leptos_server_signal
                 ::provide_websocket(format!("{}{}/ws", protocol, url).as_str())
                 .unwrap();
+
+
         }
-    }
+    }    
 
     let get = move |_| {
         spawn_local(async {
@@ -250,6 +283,18 @@ fn Dashboard() -> impl IntoView {
     let daypwsignal = create_server_signal::<DayPw>("daypwmqtt");
     let logdatasignal = create_server_signal::<LogData>("logdatamqtt");
     let rebootsignal = create_server_signal::<RebootMqtt>("rebootmqtt");
+
+
+    let lasthour = create_resource(rebootsignal, |_| async move { match get_reboothour().await {
+        Ok(a) => {
+            a
+        }
+        Err(e)=> {
+            e.to_string()
+        }
+    } });
+
+    lasthour.refetch();
 
     view! {
         <div class="flex items-stretch">
@@ -303,7 +348,7 @@ fn Dashboard() -> impl IntoView {
                 <p>"Current hour: " {move || logdatasignal().currenttimehours}</p>
                 <p>"time on: " {move || logdatasignal().timeon}</p>
 
-                <p>"last reboot hour: " {move || rebootsignal().value}</p>
+                <p>"last reboot hour: " {move || lasthour.get().unwrap_or("no defined".into())}</p>
             </div>
         </div>
 
@@ -381,10 +426,9 @@ fn Settings() -> impl IntoView {
     let settings = create_server_action::<Settings>();
 
     let _dismiss_enter_with_keyboard = window_event_listener(ev::keydown, move |ev| {
-        if ev.key() == "Enter"{
+        if ev.key() == "Enter" {
             ev.prevent_default();
         }
-        
     });
     view! {
         <Title text="Settings"/>

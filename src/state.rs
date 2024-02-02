@@ -12,6 +12,8 @@ cfg_if! {
         use crate::models::LogData;
         use crate::models::ActionMqtt;
         use crate::models::RelayMqtt;
+        use std::sync::{Arc};
+        use tokio::sync::{Mutex};
 
         /// This takes advantage of Axum's SubStates feature by deriving FromRef. This is the only way to have more than one
         /// item in Axum's State. Leptos requires you to have leptosOptions in your State struct for the leptos route handlers
@@ -27,6 +29,7 @@ cfg_if! {
             pub paramsset: mpsc::Sender<ParamsJson>,
             #[from_ref(skip)]
             pub rebootget: broadcast::Sender<i64>,
+            pub lasthour: Arc<Mutex<String>>,
         }
     }
 }
