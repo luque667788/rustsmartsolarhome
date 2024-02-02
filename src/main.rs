@@ -247,8 +247,7 @@ cfg_if! {
             );
             // receiver channel (will be implemented with server signals)
             let client2 = client.clone();
-            let lastsettings1 = Arc::clone(&lastsettings);
-            let lastsettings2 = Arc::clone(&lastsettings);
+
             tokio::task::spawn(async move {
                 let mut lasttimeon = 0.0;
                 let mut lastcurrenttime = 0;
@@ -388,6 +387,7 @@ cfg_if! {
                                         }
                                     }
                                     "esp32/sendrelaystate" => {
+                                        println!("received relay state");
                                         let state: bool = match message["state"].as_bool() {
                                             Some(v) => v,
                                             None => {
@@ -470,24 +470,7 @@ cfg_if! {
                                             .unwrap_or_else(|e|
                                                 eprintln!("publish chan ERROR: {}", e)
                                             );
-                                        let lastsettings1g = lastsettings1.lock().await;
-
-                                        let a = serde_json
-                                            ::to_string(
-                                                &*lastsettings1g
-                                            )
-                                            .expect("Failed to serialize to JSON seetigns paramns");
-                                        //println!("enconded json: {}", a);
-                                        client2
-                                            .publish(
-                                                "esp32/settings",
-                                                QoS::ExactlyOnce,
-                                                true,
-                                                a
-                                            ).await
-                                            .unwrap_or_else(|e|
-                                                eprintln!("publish params chan ERROR: {}", e)
-                                            );
+                                        
 
                                         
 
@@ -559,8 +542,8 @@ cfg_if! {
                             client
                                 .publish(
                                     "esp32/relay",
-                                    QoS::ExactlyOnce,
-                                    true,
+                                    QoS::AtMostOnce,
+                                    false,
                                     a.to_string()
                                 ).await
                                 .unwrap_or_else(|e| eprintln!("publish chan ERROR: {}", e));
@@ -601,17 +584,7 @@ cfg_if! {
                 },
                 Some(msg) = paramssetrx.recv() => {
 
-                    let mut lastsettings2g = lastsettings2.lock().await;
                     
-                    if let Some(value) = msg.minpw {
-                        lastsettings2g.minpw = Some(value);
-                    }
-                    if let Some(value) = msg.mintimeon {
-                        lastsettings2g.mintimeon = Some(value);
-                    }
-                    if let Some(value) = msg.mininterval {
-                        lastsettings2g.mininterval = Some(value);
-                    }
 
                     let a = serde_json::to_string(&msg).expect("Failed to serialize to JSON seetigns paramns");
                     println!("enconded json: {}",a);
