@@ -7,6 +7,7 @@ cfg_if! {
         use leptos::*;
         use leptos::{ logging::log, provide_context, get_configuration };
         use axum::{
+            Json,
             routing::{ get },
             extract::{ State, Path, RawQuery },
             http::{ Request, header::HeaderMap },
@@ -45,6 +46,24 @@ cfg_if! {
         use tokio::time::{ Duration };
         use std::sync::{ Arc };
         use tokio::sync::{ Mutex };
+
+        //const APIKEY: &str = "qweroij134oi41258!·!)(/)(·)";
+
+        #[cfg(feature = "ssr")]
+        pub async fn healthcheck() -> impl IntoResponse {
+            println!("some client awaked me!!");
+
+            const MESSAGE: &str = "hey there I am alive";
+
+            let json_response =
+                serde_json::json!({
+                    "status": "success",
+                    "message": MESSAGE
+                                });
+
+            Json(json_response)
+        }
+
         #[cfg(feature = "ssr")]
         pub async fn websocket(
             State(app_state): State<AppState>,
@@ -471,10 +490,11 @@ cfg_if! {
                                                 QoS::AtMostOnce,
                                                 false,
                                                 a.to_string()
-                                            ).await.expect("publish chan ERROR:");
-                                            //.unwrap_or_else(|e|
-                                             //   eprintln!("publish chan ERROR: {}", e)
-                                           // );
+                                            ).await
+                                            .expect("publish chan ERROR:");
+                                        //.unwrap_or_else(|e|
+                                        //   eprintln!("publish chan ERROR: {}", e)
+                                        // );
 
                                         if rebootq.receiver_count() > 1 {
                                             if
@@ -632,6 +652,7 @@ cfg_if! {
             let app = Router::new()
                 .route("/api/*fn_name", get(server_fn_handler).post(server_fn_handler))
                 .route("/ws", get(websocket))
+                .route("/healthcheck", get(healthcheck))
                 .leptos_routes_with_handler(routes, get(leptos_routes_handler))
                 .fallback(file_and_error_handler)
                 .with_state(app_state);
