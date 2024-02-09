@@ -1,5 +1,3 @@
-use core::num;
-
 use cfg_if::cfg_if;
 
 cfg_if! {
@@ -266,13 +264,18 @@ cfg_if! {
 
             let lasthour = Arc::new(Mutex::new("not defined".to_string()));
             let lasthour1 = Arc::clone(&lasthour);
+
+            let lastmode = Arc::new(Mutex::new(true));
+            let lastmode1 = Arc::clone(&lastmode);
+
+            let lastrelay = Arc::new(Mutex::new(false));
+            let lastrelay1 = Arc::clone(&lastrelay);
             // receiver channel (will be implemented with server signals)
             let client2 = client.clone();
 
             tokio::task::spawn(async move {
                 let mut lasttimeon = 0.0;
                 let mut lastcurrenttime = 0;
-                let mut lastmode = true;
                 'mqqttloop: loop {
                     let event = eventloop.poll().await;
                     match &event {
@@ -416,6 +419,10 @@ cfg_if! {
                                                 continue 'mqqttloop;
                                             }
                                         };
+                                        {
+                                            let mut t = lastrelay.lock().await;
+                                            *t = state;
+                                        }
                                         let mode: bool = match message["mode"].as_bool() {
                                             Some(v) => v,
                                             None => {
@@ -423,7 +430,10 @@ cfg_if! {
                                                 continue 'mqqttloop;
                                             }
                                         };
-                                        lastmode = mode;
+                                        {
+                                            let mut t = lastmode.lock().await;
+                                            *t = mode;
+                                        }
                                         if relaygetq.receiver_count() > 1 {
                                             if
                                                 let Err(e) = relaygetq.send(RelayMqtt {
@@ -462,7 +472,8 @@ cfg_if! {
                                     "esp32/reboot" => {
                                         let _lastcurrenttime = lastcurrenttime;
                                         let _lasttimeon = lasttimeon;
-                                        let _lastmode = lastmode;
+                                        let _lastmode = *lastmode.lock().await;
+                                        let _laststate = *lastrelay.lock().await;
                                         //publish last log data recieved
 
                                         let time: String = String::from(
@@ -483,11 +494,12 @@ cfg_if! {
                                               "timehour": _lastcurrenttime,
                                                    "timeon": _lasttimeon,
                                                    "mode": _lastmode,
+                                                   "state": _laststate,
                                                                 });
                                         client2
                                             .publish(
                                                 "esp32/setrebootinfo",
-                                                QoS::AtMostOnce,
+                                                QoS::ExactlyOnce,
                                                 false,
                                                 a.to_string()
                                             ).await
@@ -538,7 +550,7 @@ cfg_if! {
                         Err(e) => {
                             println!("Got event mqtt Error = {e:?}");
                             panic!("rumqttc::ConnectionError>");
-                            return Ok::<(), rumqttc::ConnectionError>(());
+                            //return Ok::<(), rumqttc::ConnectionError>(());
                         }
                     }
                 }
@@ -553,6 +565,11 @@ cfg_if! {
                     // In any websocket error, break loop.
                     match msg {
                         ActionMqtt::State(on) => {
+
+                            {
+                                let mut t = lastrelay1.lock().await;
+                                *t = on;
+                            }
                             let on = || {
                                 if on { "on" } else { "off" }
                             };
@@ -564,7 +581,7 @@ cfg_if! {
                             client
                                 .publish(
                                     "esp32/relay",
-                                    QoS::AtMostOnce,
+                                    QoS::ExactlyOnce,
                                     false,
                                     a.to_string()
                                 ).await.expect("publish chan ERROR:")
@@ -582,7 +599,11 @@ cfg_if! {
                                 //.unwrap_or_else(|e| eprintln!("publish chan ERROR: {}", e));
                         }
                         ActionMqtt::setmanualmode(on) => {
-                             
+                                {
+                                    let mut t = lastmode1.lock().await;
+                                    *t = on;
+                                }
+                                 
                                 let on = || {
                                     if on { "on" } else { "off" }
                                 };
@@ -595,7 +616,7 @@ cfg_if! {
                                 client
                                     .publish(
                                         "esp32/setmanualmode",
-                                        QoS::AtMostOnce,
+                                        QoS::ExactlyOnce,
                                         false,
                                         a.to_string()
                                     ).await.expect("publish chan ERROR:")

@@ -79,9 +79,9 @@ pub async fn set_params(
     if let Some(req) = leptos::use_context::<leptos_axum::RequestParts>() {
         if auth::isloged_fn(&req.headers).await {
             let params = ParamsJson {
-                mintimeon: mintimeon,
-                mininterval: mininterval,
-                minpw: minpw,
+                mintimeon,
+                mininterval,
+                minpw,
             };
             println!("setting mintimeon: {:#?}", mintimeon);
             println!("setting mininterval: {:#?}", mininterval);
@@ -118,7 +118,7 @@ pub fn App() -> impl IntoView {
         logout.dispatch(auth::Logout {});
     };
 
-    let user = create_resource(
+    let _user = create_resource(
         move || { (logout.version().get(), login.version().get()) },
         move |_| async move {
             let a = auth::current_user().await;
@@ -348,7 +348,7 @@ fn Dashboard() -> impl IntoView {
                 <p>"Current hour: " {move || logdatasignal().currenttimehours}</p>
                 <p>"time on: " {move || logdatasignal().timeon}</p>
 
-                <p>"last reboot hour: " {move || lasthour.get().unwrap_or("no defined".into())}</p>
+                <p>"last reboot: " {move || lasthour.get().unwrap_or("no defined".into())}</p>
             </div>
         </div>
 
@@ -387,7 +387,7 @@ fn Login(
     };
 
     view! {
-        <Title text="Login"/>
+        <Title text="Solar Pool"/>
         <div class="">
             <div class="">
                 <div class="">
