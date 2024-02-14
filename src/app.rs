@@ -464,7 +464,9 @@ fn Settings() -> impl IntoView {
                         placeholder="Please ONLY type integers, leave blank to maintain the previous value"
                     />
                 </fieldset>
+                <A href="/">
                 <button class="mx-4 bg-red-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">"Save"</button>
+                </A>
             </ActionForm>
                     
         </div>

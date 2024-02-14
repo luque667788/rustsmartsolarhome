@@ -276,6 +276,7 @@ cfg_if! {
             tokio::task::spawn(async move {
                 let mut lasttimeon = 0.0;
                 let mut lastcurrenttime = 0;
+                let mut lastcurrentday:i64 = 0;
                 'mqqttloop: loop {
                     let event = eventloop.poll().await;
                     match &event {
@@ -375,10 +376,16 @@ cfg_if! {
                                             .unwrap_or(LogData {
                                                 timeon: "error parsing json".into(),
                                                 currenttimehours: "error parsing json".into(),
+                                                dayofyear: "error parsing json".into(),
                                             });
                                         lastcurrenttime = message.currenttimehours
                                             .parse::<i64>()
                                             .unwrap_or(0);
+
+                                        lastcurrentday = message.dayofyear
+                                            .parse::<i64>()
+                                            .unwrap_or(0);
+
                                         lasttimeon = message.timeon.parse::<f64>().unwrap_or(0.0);
 
                                         if logdatagetq.receiver_count() > 1 {
@@ -471,6 +478,7 @@ cfg_if! {
                                     }
                                     "esp32/reboot" => {
                                         let _lastcurrenttime = lastcurrenttime;
+                                        let _lastcurrentday = lastcurrentday;
                                         let _lasttimeon = lasttimeon;
                                         let _lastmode = *lastmode.lock().await;
                                         let _laststate = *lastrelay.lock().await;
@@ -492,6 +500,7 @@ cfg_if! {
                                             serde_json::json!({
                                                 //find a way to convert from int to string
                                               "timehour": _lastcurrenttime,
+                                              "dayofyear": _lastcurrentday,
                                                    "timeon": _lasttimeon,
                                                    "mode": _lastmode,
                                                    "state": _laststate,

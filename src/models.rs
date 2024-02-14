@@ -23,6 +23,7 @@ pub struct DayPw {
 pub struct LogData {
     pub timeon: String,
     pub currenttimehours: String,
+    pub dayofyear: String,
 }
 
 impl fmt::Display for LogData {
