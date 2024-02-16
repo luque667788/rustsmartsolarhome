@@ -5,7 +5,6 @@ use crate::models::ParamsJson;
 cfg_if! {
     if #[cfg(feature = "ssr")] {
         use leptos::LeptosOptions;
-
         use axum::extract::FromRef;
         use tokio::sync::broadcast;
         use tokio::sync::mpsc;
@@ -29,7 +28,7 @@ cfg_if! {
             pub paramsset: mpsc::Sender<ParamsJson>,
             #[from_ref(skip)]
             pub rebootget: broadcast::Sender<i64>,
-            pub lasthour: Arc<Mutex<String>>,
+            pub sqlpool: sqlx::MySqlPool,
         }
     }
 }

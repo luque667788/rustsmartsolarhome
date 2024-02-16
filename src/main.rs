@@ -16,6 +16,7 @@ cfg_if! {
         use serde_json::{ Value };
 
         use leptos_axum::{ generate_route_list, LeptosRoutes, handle_server_fns_with_context };
+        use sqlx::mysql::MySqlPoolOptions;
         use rumqttc::{
             AsyncClient,
             Event,
@@ -169,7 +170,7 @@ cfg_if! {
                 move || {
                     provide_context(app_state.relayset.clone());
                     provide_context(app_state.paramsset.clone());
-                    provide_context(app_state.lasthour.clone());
+                    provide_context(app_state.sqlpool.clone());
                 },
                 request
             ).await
@@ -256,14 +257,15 @@ cfg_if! {
                 mReceiver<ParamsJson>,
             ) = mpsc::channel(100);
 
+            let pool = MySqlPoolOptions::new()
+                .max_connections(5)
+                .connect("mysql://sql10684347:22ZcxJDEgR@sql10.freemysqlhosting.net:3306/sql10684347").await.expect("failed to connect to mysql db");
+
             let currentpwgetq = currentpwget.clone();
             let daypwgetq = daypwget.clone();
             let relaygetq = relayget.clone();
             let logdatagetq = logdataget.clone();
             let rebootq = reboot.clone();
-
-            let lasthour = Arc::new(Mutex::new("not defined".to_string()));
-            let lasthour1 = Arc::clone(&lasthour);
 
             let lastmode = Arc::new(Mutex::new(true));
             let lastmode1 = Arc::clone(&lastmode);
@@ -272,11 +274,12 @@ cfg_if! {
             let lastrelay1 = Arc::clone(&lastrelay);
             // receiver channel (will be implemented with server signals)
             let client2 = client.clone();
-
+            let pool1 = pool.clone();
             tokio::task::spawn(async move {
+                
                 let mut lasttimeon = 0.0;
                 let mut lastcurrenttime = 0;
-                let mut lastcurrentday:i64 = 0;
+                let mut lastcurrentday: i64 = 0;
                 'mqqttloop: loop {
                     let event = eventloop.poll().await;
                     match &event {
@@ -387,6 +390,8 @@ cfg_if! {
                                             .unwrap_or(0);
 
                                         lasttimeon = message.timeon.parse::<f64>().unwrap_or(0.0);
+                                        
+
 
                                         if logdatagetq.receiver_count() > 1 {
                                             if let Err(e) = logdatagetq.send(message.clone()) {
@@ -480,6 +485,7 @@ cfg_if! {
                                         let _lastcurrenttime = lastcurrenttime;
                                         let _lastcurrentday = lastcurrentday;
                                         let _lasttimeon = lasttimeon;
+
                                         let _lastmode = *lastmode.lock().await;
                                         let _laststate = *lastrelay.lock().await;
                                         //publish last log data recieved
@@ -491,11 +497,7 @@ cfg_if! {
                                         );
 
                                         println!("recevied mqtt message from reboot chan, currenttime = {}", time);
-                                        {
-                                            let mut t = lasthour1.lock().await;
-                                            *t = time.clone();
-                                        }
-
+                                        sqlx::query(r#"UPDATE 'esp32pool' SET 'lastreboot' = ?"#).bind(time.clone()).execute(&pool1).await.expect("error exceuting update in db");
                                         let a =
                                             serde_json::json!({
                                                 //find a way to convert from int to string
@@ -676,7 +678,8 @@ cfg_if! {
                 logdataget,
                 rebootget: reboot,
                 paramsset,
-                lasthour: lasthour.clone(),
+            
+                sqlpool: pool.clone(),
             };
             // build our application with a route
             let app = Router::new()

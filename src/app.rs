@@ -13,22 +13,21 @@ use crate::models::*;
 
 #[cfg(feature = "ssr")]
 use tokio::sync::mpsc;
-#[cfg(feature = "ssr")]
-use std::sync::Arc;
-#[cfg(feature = "ssr")]
-use tokio::sync::Mutex;
+
 
 #[server(GetReboot)]
 pub async fn get_reboothour() -> Result<String, ServerFnError> {
     //
     if let Some(req) = leptos::use_context::<leptos_axum::RequestParts>() {
         if auth::isloged_fn(&req.headers).await {
-            let hour = use_context::<Arc<Mutex<String>>>().ok_or_else(||
-                ServerFnError::ServerError("could not get lasthour".into())
+            let hour = use_context::<sqlx::MySqlPool>().ok_or_else(||
+                ServerFnError::ServerError("could not get pool conn".into())
             );
             return match hour {
                 Ok(h) => {
-                     Ok(h.lock().await.clone())
+                    let result: (String,) = sqlx::query_as(r#"SELECT lastreboot FROM esp32pool;"#).fetch_one(&h).await.expect("error exceuting update in db");
+
+                     Ok(result.0)
                 }
                 Err(e) =>{
                      Err(e)
@@ -464,9 +463,9 @@ fn Settings() -> impl IntoView {
                         placeholder="Please ONLY type integers, leave blank to maintain the previous value"
                     />
                 </fieldset>
-                <A href="/">
+                
                 <button class="mx-4 bg-red-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">"Save"</button>
-                </A>
+                
             </ActionForm>
                     
         </div>
