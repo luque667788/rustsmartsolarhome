@@ -1,4 +1,6 @@
 use cfg_if::cfg_if;
+use log::kv::ToValue;
+use sqlx::Row;
 
 cfg_if! {
     if #[cfg(feature = "ssr")] {
@@ -192,7 +194,7 @@ cfg_if! {
 
         #[tokio::main]
         async fn main() {
-            simple_logger::init_with_level(log::Level::Error).expect("couldn't initialize logging");
+            simple_logger::init_with_level(log::Level::Error).expect("couldn`t initialize logging");
             //this comment mean that this is deploy hahahahah
             let mut mqqt_opts = MqttOptions::new(
                 "test-1",
@@ -259,7 +261,10 @@ cfg_if! {
 
             let pool = MySqlPoolOptions::new()
                 .max_connections(5)
-                .connect("mysql://sql10684347:22ZcxJDEgR@sql10.freemysqlhosting.net:3306/sql10684347").await.expect("failed to connect to mysql db");
+                .connect(
+                    "mysql://sql10684347:22ZcxJDEgR@sql10.freemysqlhosting.net:3306/sql10684347"
+                ).await
+                .expect("failed to connect to mysql db");
 
             let currentpwgetq = currentpwget.clone();
             let daypwgetq = daypwget.clone();
@@ -267,19 +272,11 @@ cfg_if! {
             let logdatagetq = logdataget.clone();
             let rebootq = reboot.clone();
 
-            let lastmode = Arc::new(Mutex::new(true));
-            let lastmode1 = Arc::clone(&lastmode);
-
-            let lastrelay = Arc::new(Mutex::new(false));
-            let lastrelay1 = Arc::clone(&lastrelay);
             // receiver channel (will be implemented with server signals)
             let client2 = client.clone();
             let pool1 = pool.clone();
+            let pool2 = pool.clone();
             tokio::task::spawn(async move {
-                
-                let mut lasttimeon = 0.0;
-                let mut lastcurrenttime = 0;
-                let mut lastcurrentday: i64 = 0;
                 'mqqttloop: loop {
                     let event = eventloop.poll().await;
                     match &event {
@@ -381,17 +378,17 @@ cfg_if! {
                                                 currenttimehours: "error parsing json".into(),
                                                 dayofyear: "error parsing json".into(),
                                             });
-                                        lastcurrenttime = message.currenttimehours
-                                            .parse::<i64>()
-                                            .unwrap_or(0);
 
-                                        lastcurrentday = message.dayofyear
-                                            .parse::<i64>()
-                                            .unwrap_or(0);
-
-                                        lasttimeon = message.timeon.parse::<f64>().unwrap_or(0.0);
-                                        
-
+                                        sqlx::query(
+                                            r#"UPDATE `esp32pool` SET `timeon` = ?,`lasttime` = ?,`lastday` = ? "#
+                                        )
+                                            .bind(message.timeon.parse::<f64>().unwrap_or(0.0))
+                                            .bind(
+                                                message.currenttimehours.parse::<i64>().unwrap_or(0)
+                                            )
+                                            .bind(message.dayofyear.parse::<i64>().unwrap_or(0))
+                                            .execute(&pool1).await
+                                            .expect("error exceuting update in db");
 
                                         if logdatagetq.receiver_count() > 1 {
                                             if let Err(e) = logdatagetq.send(message.clone()) {
@@ -431,10 +428,12 @@ cfg_if! {
                                                 continue 'mqqttloop;
                                             }
                                         };
-                                        {
-                                            let mut t = lastrelay.lock().await;
-                                            *t = state;
-                                        }
+
+                                        sqlx::query(r#"UPDATE `esp32pool` SET `laststate` = ?;"#)
+                                            .bind(state)
+                                            .execute(&pool1).await
+                                            .expect("error exceuting update in db");
+
                                         let mode: bool = match message["mode"].as_bool() {
                                             Some(v) => v,
                                             None => {
@@ -442,10 +441,11 @@ cfg_if! {
                                                 continue 'mqqttloop;
                                             }
                                         };
-                                        {
-                                            let mut t = lastmode.lock().await;
-                                            *t = mode;
-                                        }
+                                        sqlx::query(r#"UPDATE esp32pool SET lastmode = ?;"#)
+                                            .bind(mode)
+                                            .execute(&pool1).await
+                                            .expect("error exceuting update in db");
+
                                         if relaygetq.receiver_count() > 1 {
                                             if
                                                 let Err(e) = relaygetq.send(RelayMqtt {
@@ -482,12 +482,16 @@ cfg_if! {
                                         }
                                     }
                                     "esp32/reboot" => {
-                                        let _lastcurrenttime = lastcurrenttime;
-                                        let _lastcurrentday = lastcurrentday;
-                                        let _lasttimeon = lasttimeon;
+                                        let result = sqlx
+                                            ::query(r#"SELECT * FROM esp32pool;"#)
+                                            .fetch_all(&pool1).await
+                                            .expect("error exceuting update in db");
 
-                                        let _lastmode = *lastmode.lock().await;
-                                        let _laststate = *lastrelay.lock().await;
+                                        let _lastcurrenttime:i32 = result[0].get("lasttime");
+                                        let _lastcurrentday:i32 = result[0].get("lastday");
+                                        let _lasttimeon:f64 = result[0].get("timeon");
+                                        let _lastmode:i32 = result[0].get("lastmode");
+                                        let _laststate:i32 = result[0].get("laststate");
                                         //publish last log data recieved
 
                                         let time: String = String::from(
@@ -497,7 +501,11 @@ cfg_if! {
                                         );
 
                                         println!("recevied mqtt message from reboot chan, currenttime = {}", time);
-                                        sqlx::query(r#"UPDATE 'esp32pool' SET 'lastreboot' = ?"#).bind(time.clone()).execute(&pool1).await.expect("error exceuting update in db");
+
+                                        sqlx::query(r#"UPDATE esp32pool SET lastreboot = ? "#)
+                                            .bind(time.clone())
+                                            .execute(&pool1).await
+                                            .expect("error exceuting update in db");
                                         let a =
                                             serde_json::json!({
                                                 //find a way to convert from int to string
@@ -577,10 +585,10 @@ cfg_if! {
                     match msg {
                         ActionMqtt::State(on) => {
 
-                            {
-                                let mut t = lastrelay1.lock().await;
-                                *t = on;
-                            }
+                            sqlx::query(r#"UPDATE esp32pool SET laststate = ?;"#)
+                                            .bind(on)
+                                            .execute(&pool2).await
+                                            .expect("error exceuting update in db");
                             let on = || {
                                 if on { "on" } else { "off" }
                             };
@@ -610,10 +618,10 @@ cfg_if! {
                                 //.unwrap_or_else(|e| eprintln!("publish chan ERROR: {}", e));
                         }
                         ActionMqtt::setmanualmode(on) => {
-                                {
-                                    let mut t = lastmode1.lock().await;
-                                    *t = on;
-                                }
+                            sqlx::query(r#"UPDATE esp32pool SET lastmode = ?;"#)
+                            .bind(on)
+                            .execute(&pool2).await
+                            .expect("error exceuting update in db");
                                  
                                 let on = || {
                                     if on { "on" } else { "off" }
@@ -658,7 +666,7 @@ cfg_if! {
             // *** spawn thread that listens to eventloop and publish to channel tx
             // and takes care of also sending messages
 
-            // Setting get_configuration(None) means we'll be using cargo-leptos's env values
+            // Setting get_configuration(None) means we`ll be using cargo-leptos`s env values
             // For deployment these variables are:
             // <https://github.com/leptos-rs/start-axum#executing-a-server-on-a-remote-machine-without-the-toolchain>
             // Alternately a file can be specified such as Some("Cargo.toml")
@@ -678,7 +686,7 @@ cfg_if! {
                 logdataget,
                 rebootget: reboot,
                 paramsset,
-            
+
                 sqlpool: pool.clone(),
             };
             // build our application with a route
