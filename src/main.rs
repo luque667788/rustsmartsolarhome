@@ -393,7 +393,7 @@ cfg_if! {
                                                 currenttimehours: "error parsing json".into(),
                                                 dayofyear: "error parsing json".into(),
                                             });
-
+                                        println!("setting timeon: {}",message.timeon.parse::<f64>().unwrap_or(0.0));
                                         sqlx::query(
                                             r#"UPDATE esp32pool SET timeon = ?,lasttime = ?,lastday = ? "#
                                         )
