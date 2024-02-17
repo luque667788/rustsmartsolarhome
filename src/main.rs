@@ -380,7 +380,7 @@ cfg_if! {
                                             });
 
                                         sqlx::query(
-                                            r#"UPDATE `esp32pool` SET `timeon` = ?,`lasttime` = ?,`lastday` = ? "#
+                                            r#"UPDATE esp32pool SET timeon = ?,lasttime = ?,lastday = ? "#
                                         )
                                             .bind(message.timeon.parse::<f64>().unwrap_or(0.0))
                                             .bind(
@@ -429,7 +429,7 @@ cfg_if! {
                                             }
                                         };
 
-                                        sqlx::query(r#"UPDATE `esp32pool` SET `laststate` = ?;"#)
+                                        sqlx::query(r#"UPDATE esp32pool SET laststate = ?;"#)
                                             .bind(state)
                                             .execute(&pool1).await
                                             .expect("error exceuting update in db");
