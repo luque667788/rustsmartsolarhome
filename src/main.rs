@@ -1,9 +1,8 @@
 use cfg_if::cfg_if;
-use log::kv::ToValue;
-use sqlx::Row;
 
 cfg_if! {
     if #[cfg(feature = "ssr")] {
+        use sqlx::Row;
         use leptos::*;
         use leptos::{ logging::log, provide_context, get_configuration };
         use axum::{
@@ -45,21 +44,37 @@ cfg_if! {
         use tokio::sync::mpsc::Receiver as mReceiver;
         use tokio::sync::mpsc::Sender as mSender;
         use tokio::time::{ Duration };
-        use std::sync::{ Arc };
-        use tokio::sync::{ Mutex };
 
         //const APIKEY: &str = "qweroij134oi41258!·!)(/)(·)";
 
         #[cfg(feature = "ssr")]
-        pub async fn healthcheck() -> impl IntoResponse {
+        pub async fn healthcheck(State(app_state): State<AppState>) -> impl IntoResponse {
+
             println!("some client awaked me!!");
 
-            const MESSAGE: &str = "hey there I am alive";
+            let result = sqlx
+                ::query(r#"SELECT * FROM esp32pool;"#)
+                .fetch_all(&app_state.sqlpool).await
+                .expect("error exceuting update in db");
+
+            
+            let _lastcurrenttime: i32 = result[0].get("lasttime");
+            let _lastcurrentday: i32 = result[0].get("lastday");
+
+            let _lasttimeon: f32 = result[0].get("timeon");
+
+            let _lastmode: bool = result[0].get("lastmode");
+            let _laststate: bool = result[0].get("laststate");
+            
 
             let json_response =
                 serde_json::json!({
-                    "status": "success",
-                    "message": MESSAGE
+                //find a way to convert from int to string
+              "timehour": _lastcurrenttime,
+              "dayofyear": _lastcurrentday,
+                   "timeon": _lasttimeon,
+                   "mode": _lastmode,
+                   "state": _laststate,
                                 });
 
             Json(json_response)
@@ -273,7 +288,7 @@ cfg_if! {
             let rebootq = reboot.clone();
 
             // receiver channel (will be implemented with server signals)
-            let client2 = client.clone();
+            //let client2 = client.clone();
             let pool1 = pool.clone();
             let pool2 = pool.clone();
             tokio::task::spawn(async move {
@@ -482,51 +497,63 @@ cfg_if! {
                                         }
                                     }
                                     "esp32/reboot" => {
+                                        /*
                                         let result = sqlx
-                                            ::query(r#"SELECT * FROM esp32pool;"#)
-                                            .fetch_all(&pool1).await
-                                            .expect("error exceuting update in db");
-
-                                        let _lastcurrenttime:i32 = result[0].get("lasttime");
-                                        let _lastcurrentday:i32 = result[0].get("lastday");
-                                        let _lasttimeon:f64 = result[0].get("timeon");
-                                        let _lastmode:i32 = result[0].get("lastmode");
-                                        let _laststate:i32 = result[0].get("laststate");
-                                        //publish last log data recieved
-
-                                        let time: String = String::from(
-                                            message["currenttimehours"]
-                                                .as_str()
-                                                .unwrap_or("error reboot time json parsing")
-                                        );
-
-                                        println!("recevied mqtt message from reboot chan, currenttime = {}", time);
-
+                                        ::query(r#"SELECT * FROM esp32pool;"#)
+                                        .fetch_all(&pool1).await
+                                        .expect("error exceuting update in db");
+                                    
+                                    let _lastcurrenttime: i32 = result[0].get("lasttime");
+                                    let _lastcurrentday: i32 = result[0].get("lastday");
+                                    let _lasttimeon: f64 = result[0].get("timeon");
+                                    
+                                    let _lastmode: bool = matches!(
+                                        result[0].get("lastmode"),
+                                        1
+                                    );
+                                    let _laststate: bool = matches!(
+                                        result[0].get("laststate"),
+                                        1
+                                    );
+                                    */
+                                    
+                                    //publish last log data recieved
+                                    
+                                    let time: String = String::from(
+                                        message["currenttimehours"]
+                                        .as_str()
+                                        .unwrap_or("error reboot time json parsing")
+                                    );
+                                    
+                                    println!("recevied mqtt message from reboot chan, currenttime = {}", time);
+                                    
                                         sqlx::query(r#"UPDATE esp32pool SET lastreboot = ? "#)
                                             .bind(time.clone())
                                             .execute(&pool1).await
                                             .expect("error exceuting update in db");
+                                        /*
                                         let a =
-                                            serde_json::json!({
-                                                //find a way to convert from int to string
-                                              "timehour": _lastcurrenttime,
-                                              "dayofyear": _lastcurrentday,
-                                                   "timeon": _lasttimeon,
-                                                   "mode": _lastmode,
-                                                   "state": _laststate,
-                                                                });
+                                        serde_json::json!({
+                                            //find a way to convert from int to string
+                                            "timehour": _lastcurrenttime,
+                                            "dayofyear": _lastcurrentday,
+                                            "timeon": _lasttimeon,
+                                            "mode": _lastmode,
+                                            "state": _laststate,
+                                        });
                                         client2
-                                            .publish(
-                                                "esp32/setrebootinfo",
-                                                QoS::ExactlyOnce,
-                                                false,
-                                                a.to_string()
-                                            ).await
-                                            .expect("publish chan ERROR:");
-                                        //.unwrap_or_else(|e|
+                                        .publish(
+                                            "esp32/setrebootinfo",
+                                            QoS::ExactlyOnce,
+                                            false,
+                                            a.to_string()
+                                        ).await
+                                        .expect("publish chan ERROR:");
+                                    //.unwrap_or_else(|e|
                                         //   eprintln!("publish chan ERROR: {}", e)
                                         // );
-
+                                        */
+                                        
                                         if rebootq.receiver_count() > 1 {
                                             if
                                                 let Err(e) = rebootq.send(
@@ -687,7 +714,7 @@ cfg_if! {
                 rebootget: reboot,
                 paramsset,
 
-                sqlpool: pool.clone(),
+                sqlpool: pool,
             };
             // build our application with a route
             let app = Router::new()

@@ -15,6 +15,7 @@ use crate::models::*;
 use tokio::sync::mpsc;
 
 
+
 #[server(GetReboot)]
 pub async fn get_reboothour() -> Result<String, ServerFnError> {
     //
