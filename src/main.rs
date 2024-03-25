@@ -33,7 +33,7 @@ cfg_if! {
         pub mod state;
         pub mod auth;
         pub mod models;
-
+        use dotenv::dotenv;
         use crate::fileserv::file_and_error_handler;
         use crate::state::AppState;
         use crate::models::*;
@@ -209,14 +209,22 @@ cfg_if! {
 
         #[tokio::main]
         async fn main() {
+            dotenv().ok();
+
+            let MQTTUSERNAME = std::env::var("MQTTUSERNAME").expect("MQTTUSERNAME must be set in .env");
+            let MQTTPASSWORD = std::env::var("MQTTPASSWORD").expect("MQTTPASSWORD must be set in .env");
+            let  MQTTNAME = std::env::var("MQTTNAME").expect("MQTTNAME must be set in .env");
+            let MQTTPORT:u16 = std::env::var("MQTTPORT").expect("MQTTPORT must be set in .env").parse().expect("MQTTPORT must be a number");
+            let  MQTTURL = std::env::var("MQTTURL").expect("MQTTURL must be set in .env");
+
             simple_logger::init_with_level(log::Level::Error).expect("couldn`t initialize logging");
             //this comment mean that this is deploy hahahahah
             let mut mqqt_opts = MqttOptions::new(
-                "test-1",
-                "w39b31e7.ala.us-east-1.emqxsl.com",
-                8883
+                MQTTNAME,
+                MQTTURL,
+                MQTTPORT
             );
-            mqqt_opts.set_credentials("test", "qwer1234");
+            mqqt_opts.set_credentials(MQTTUSERNAME, MQTTPASSWORD);
             mqqt_opts.set_keep_alive(Duration::from_secs(12 * 60 * 60));
 
             let ca = include_bytes!("emqx.crt").to_vec();
@@ -273,11 +281,11 @@ cfg_if! {
                 mSender<ParamsJson>,
                 mReceiver<ParamsJson>,
             ) = mpsc::channel(100);
-
+            let SQLURL = std::env::var("SQLURL").expect("SQLURL must be set in .env");
             let pool = MySqlPoolOptions::new()
                 .max_connections(5)
                 .connect(
-                    "mysql://sql10684347:22ZcxJDEgR@sql10.freemysqlhosting.net:3306/sql10684347"
+                    &SQLURL
                 ).await
                 .expect("failed to connect to mysql db");
 
