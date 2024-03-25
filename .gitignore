@@ -1,3 +1,4 @@
 /target
 /.vscode
-/.env
+.env
+src/emqx.crt
