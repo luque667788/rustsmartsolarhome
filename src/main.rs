@@ -7,6 +7,10 @@ This project is still heavily under development.
 If you have any question or doubts please feel free to contact me email:
 luquemendonca@gmail.com
 
+
+p.s: right now i need to do the database migrations/initiate tables manually
+of course later I will implement it.
+
 */
 
 
