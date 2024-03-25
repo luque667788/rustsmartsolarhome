@@ -4,6 +4,8 @@ This is my ESP32S smart home frontend developed with Rust (WASM), utilizing the 
 
 The page is served with hydration (SSR and CSR) which is seamlessly implemented out of the box with Leptos. It communicates via MQTT (and some bits of usual HTTP) with ESP32. 
 
+If there are any questions, feel free to contact me by email: luquemendonca@gmail.com
+
 **Warning**: This project is heavily under development and far from completion. It is important to note that development authentication is only rudimentarily implemented with hard-coded credentials. Also, error handling has only a rudimentary implemention. The code, in general, is messy and lacks proper comments/documentation. There are likely many other security issues with the site which will be addressed later.
 
 ## Purpose
