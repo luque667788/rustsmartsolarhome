@@ -37,7 +37,6 @@ pub async fn login_fn(username: String, password: String) -> Result<(), ServerFn
             name: username,
             pass: password,
         }).await;
-        //leptos_axum::redirect("/");
         println!("user will login");
         Ok(())
     } else {

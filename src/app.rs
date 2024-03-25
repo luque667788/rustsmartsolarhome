@@ -1,4 +1,3 @@
-//the signal change but protected rout do not update!!!
 
 use cfg_if::cfg_if;
 
@@ -18,7 +17,7 @@ use tokio::sync::mpsc;
 
 #[server(GetReboot)]
 pub async fn get_reboothour() -> Result<String, ServerFnError> {
-    //
+    
     if let Some(req) = leptos::use_context::<leptos_axum::RequestParts>() {
         if auth::isloged_fn(&req.headers).await {
             let hour = use_context::<sqlx::MySqlPool>().ok_or_else(||
@@ -246,9 +245,13 @@ fn Dashboard() -> impl IntoView {
     cfg_if! {
         if #[cfg(feature = "hydrate")] {
             let window = web_sys::window().unwrap();
+
+            //here we are assuming that the frontend and the backend is hosted in the 
+            // same server/location
             let url = window.location().host().unwrap();
 
             let protocol = {
+                
                 if window.location().protocol().unwrap() == "https:" { "wss://" } else { "ws://" }
             };
             leptos_server_signal

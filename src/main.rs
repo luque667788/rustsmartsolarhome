@@ -1,3 +1,17 @@
+/*
+please IGNORE the comments in all this codebase
+
+
+This project is still heavily under development.
+
+If you have any question or doubts please feel free to contact me email:
+luquemendonca@gmail.com
+
+*/
+
+
+
+
 use cfg_if::cfg_if;
 
 cfg_if! {
@@ -45,7 +59,6 @@ cfg_if! {
         use tokio::sync::mpsc::Sender as mSender;
         use tokio::time::{ Duration };
 
-        //const APIKEY: &str = "qweroij134oi41258!·!)(/)(·)";
 
         #[cfg(feature = "ssr")]
         pub async fn healthcheck(State(app_state): State<AppState>) -> impl IntoResponse {
@@ -69,7 +82,6 @@ cfg_if! {
 
             let json_response =
                 serde_json::json!({
-                //find a way to convert from int to string
               "timehour": _lastcurrenttime,
               "dayofyear": _lastcurrentday,
                    "timeon": _lasttimeon,
@@ -218,12 +230,13 @@ cfg_if! {
             let  MQTTURL = std::env::var("MQTTURL").expect("MQTTURL must be set in .env");
 
             simple_logger::init_with_level(log::Level::Error).expect("couldn`t initialize logging");
-            //this comment mean that this is deploy hahahahah
+            //this comment mean that this is deploy version (just some git testing)
             let mut mqqt_opts = MqttOptions::new(
                 MQTTNAME,
                 MQTTURL,
                 MQTTPORT
             );
+
             mqqt_opts.set_credentials(MQTTUSERNAME, MQTTPASSWORD);
             mqqt_opts.set_keep_alive(Duration::from_secs(12 * 60 * 60));
 
@@ -296,7 +309,6 @@ cfg_if! {
             let rebootq = reboot.clone();
 
             // receiver channel (will be implemented with server signals)
-            //let client2 = client.clone();
             let pool1 = pool.clone();
             let pool2 = pool.clone();
             tokio::task::spawn(async move {
@@ -505,25 +517,6 @@ cfg_if! {
                                         }
                                     }
                                     "esp32/reboot" => {
-                                        /*
-                                        let result = sqlx
-                                        ::query(r#"SELECT * FROM esp32pool;"#)
-                                        .fetch_all(&pool1).await
-                                        .expect("error exceuting update in db");
-                                    
-                                    let _lastcurrenttime: i32 = result[0].get("lasttime");
-                                    let _lastcurrentday: i32 = result[0].get("lastday");
-                                    let _lasttimeon: f64 = result[0].get("timeon");
-                                    
-                                    let _lastmode: bool = matches!(
-                                        result[0].get("lastmode"),
-                                        1
-                                    );
-                                    let _laststate: bool = matches!(
-                                        result[0].get("laststate"),
-                                        1
-                                    );
-                                    */
                                     
                                     //publish last log data recieved
                                     
@@ -539,28 +532,7 @@ cfg_if! {
                                             .bind(time.clone())
                                             .execute(&pool1).await
                                             .expect("error exceuting update in db");
-                                        /*
-                                        let a =
-                                        serde_json::json!({
-                                            //find a way to convert from int to string
-                                            "timehour": _lastcurrenttime,
-                                            "dayofyear": _lastcurrentday,
-                                            "timeon": _lasttimeon,
-                                            "mode": _lastmode,
-                                            "state": _laststate,
-                                        });
-                                        client2
-                                        .publish(
-                                            "esp32/setrebootinfo",
-                                            QoS::ExactlyOnce,
-                                            false,
-                                            a.to_string()
-                                        ).await
-                                        .expect("publish chan ERROR:");
-                                    //.unwrap_or_else(|e|
-                                        //   eprintln!("publish chan ERROR: {}", e)
-                                        // );
-                                        */
+                                        
                                         
                                         if rebootq.receiver_count() > 1 {
                                             if
@@ -604,7 +576,6 @@ cfg_if! {
                         Err(e) => {
                             println!("Got event mqtt Error = {e:?}");
                             panic!("rumqttc::ConnectionError>");
-                            //return Ok::<(), rumqttc::ConnectionError>(());
                         }
                     }
                 }
@@ -639,7 +610,6 @@ cfg_if! {
                                     false,
                                     a.to_string()
                                 ).await.expect("publish chan ERROR:")
-                                //.unwrap_or_else(|e| eprintln!("publish chan ERROR: {}", e));
                         }
                         ActionMqtt::Get => {
                             println!("received request to get data");
@@ -650,7 +620,6 @@ cfg_if! {
                                     false,
                                     "uninportant message"
                                 ).await.expect("publish chan ERROR:")
-                                //.unwrap_or_else(|e| eprintln!("publish chan ERROR: {}", e));
                         }
                         ActionMqtt::setmanualmode(on) => {
                             sqlx::query(r#"UPDATE esp32pool SET lastmode = ?;"#)
@@ -674,7 +643,6 @@ cfg_if! {
                                         false,
                                         a.to_string()
                                     ).await.expect("publish chan ERROR:")
-                                    //.unwrap_or_else(|e| eprintln!("publish chan ERROR: {}", e));
                             
                         }
                     }
@@ -701,11 +669,6 @@ cfg_if! {
             // *** spawn thread that listens to eventloop and publish to channel tx
             // and takes care of also sending messages
 
-            // Setting get_configuration(None) means we`ll be using cargo-leptos`s env values
-            // For deployment these variables are:
-            // <https://github.com/leptos-rs/start-axum#executing-a-server-on-a-remote-machine-without-the-toolchain>
-            // Alternately a file can be specified such as Some("Cargo.toml")
-            // The file would need to be included with the executable when moved to deployment
             let conf = get_configuration(None).await.unwrap();
             let leptos_options = conf.leptos_options;
             let addr = leptos_options.site_addr;

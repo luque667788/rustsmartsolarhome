@@ -13,7 +13,7 @@ One of the most useful cases in my specific home situation is a pump for the poo
 
 ## Hardware Conditions
 
-It is worth noting that there is also a substantial codebase written in C++ which manages the ESP32 microcontroller part.
+It is worth noting that there is also a substantial codebase written in C++ which manages the ESP32 microcontroller part that is currently private but in the future will also be made public.
 
 One thing to consider is that the ESP32´s operating conditions are uncertain. It may be offline due to energy shortages, a memory bug in its code, or any other issue. Therefore, this code needs to handle retaining its last values before it went offline and send them to the ESP32 when it comes back online.
 
