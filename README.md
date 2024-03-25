@@ -1,6 +1,6 @@
 # Smart Home Frontend (Built with Rust/WASM using Leptos Framework)
 
-This is my ESP32S smart home frontend developed with Rust (WASM), utilizing the [Leptos](https://leptos.dev/) framework.
+This is my smart home frontend developed with Rust (WASM), utilizing the [Leptos](https://leptos.dev/) framework.
 
 The page is served with hydration (SSR and CSR) which is seamlessly implemented out of the box with Leptos. It communicates via MQTT (and some bits of usual HTTP) with ESP32. 
 
