@@ -20,5 +20,5 @@ It is worth noting that there is also a substantial codebase written in C++ whic
 One thing to consider is that the ESP32´s operating conditions are uncertain. It may be offline due to energy shortages, a memory bug in its code, or any other issue. Therefore, this code needs to handle retaining its last values before it went offline and send them to the ESP32 when it comes back online.
 
 ## Deploy
-This project can run on docker and an MVP will in the future be hosted on [render.com](render.com)
+This project can run on docker and everything compiles to a single executable for frontend and backend
 
