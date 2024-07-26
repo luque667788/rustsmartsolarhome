@@ -6,7 +6,7 @@ The page is served with hydration (SSR and CSR) which is seamlessly implemented 
 
 If there are any questions, feel free to contact me by email: luquemendonca@gmail.com
 
-**Warning**: This project is heavily under development and far from completion. It is important to note that development authentication is only rudimentarily implemented with hard-coded credentials. Also, error handling has only a rudimentary implemention. The code, in general, is messy and lacks proper comments/documentation. There are likely many other security issues with the site which will be addressed later.
+**Warning**: This project is heavily under development and far from completion. It is important to note that development authentication is only rudimentarily implemented with hard-coded credentials. Also, error handling has only a rudimentary implemention. There are other security issues with the site which will be addressed later.
 
 ## Purpose
 This project is designed for on-grid solar grid applications where energy consumption occurs when power is generated to avoid energy production excess. It is intended to work with any time-dependent devices relying on energy to operate, needing to run at specific times of the day.
